@@ -51,6 +51,17 @@ const tools = [
       },
     },
   },
+  {
+    name: "trail_run_domain_evals",
+    description: "Run real paired TRAIL evaluations for robotics, SaaS, and AI/ML through the configured live provider. Results are based on independent evidence gates, never agent prose.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        repetitions: { type: "integer", minimum: 1, maximum: 10, description: "Paired runs per domain. Default: 3." },
+      },
+    },
+  },
 ];
 
 async function request(path: string, body: unknown) {
@@ -70,6 +81,7 @@ async function callTool(name: string, args: Record<string, unknown>) {
     const { bundleId, ...body } = args;
     return request(`/api/context/${String(bundleId)}/verify`, body);
   }
+  if (name === "trail_run_domain_evals") return request("/api/evals/domains/run", args);
   throw new Error(`Unknown tool: ${name}`);
 }
 
