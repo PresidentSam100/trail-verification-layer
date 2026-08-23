@@ -13,6 +13,7 @@ import { compileContext, recoverContext } from "./context.js";
 import { verifyContext } from "./verification.js";
 import { preflight } from "./config.js";
 import { execFileSync } from "node:child_process";
+import { runDomainEvals, saveDomainEvalResult } from "./domain-evals.js";
 
 const db = new TrailDatabase(config.databasePath);
 loadCorpus(db);
@@ -33,6 +34,11 @@ try {
     console.log(JSON.stringify(preview, null, 2));
   } else if (command === "benchmark") {
     console.log(JSON.stringify(runBenchmark(db), null, 2));
+  } else if (command === "eval") {
+    const repetitions = Number(option("--repetitions") ?? 3);
+    const result = await runDomainEvals(db, repetitions);
+    const path = saveDomainEvalResult(result);
+    console.log(JSON.stringify({ path, result }, null, 2));
   } else if (command === "run") {
     const result = new HarnessService(db).startPairedRun(0);
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
@@ -70,7 +76,7 @@ try {
     }
     console.log(JSON.stringify(publishVerificationStatus({ repo, sha, state, description: option("--description") ?? `TRAIL verification ${state}` }), null, 2));
   } else {
-    console.log("TRAIL CLI\n  trail context --task \"...\" [--workspace PATH]\n  trail recover --bundle ID --failure \"...\"\n  trail verify --bundle ID [--workspace PATH]\n  trail doctor\n  trail ingest --scan\n  trail ingest <transcript.jsonl>\n  trail benchmark\n  trail run\n  trail verify-pr --repo owner/name --sha COMMIT --state pending|success|failure [--bundle ID]");
+    console.log("TRAIL CLI\n  trail context --task \"...\" [--workspace PATH]\n  trail recover --bundle ID --failure \"...\"\n  trail verify --bundle ID [--workspace PATH]\n  trail doctor\n  trail ingest --scan\n  trail ingest <transcript.jsonl>\n  trail benchmark\n  trail eval [--repetitions 3]\n  trail run\n  trail verify-pr --repo owner/name --sha COMMIT --state pending|success|failure [--bundle ID]");
   }
 } finally {
   db.close();

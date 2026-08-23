@@ -16,6 +16,7 @@ import { indexLocalSources } from "./source-index.js";
 import { runBenchmark } from "./benchmark.js";
 import { compileContext, recoverContext } from "./context.js";
 import { verifyContext } from "./verification.js";
+import { getDomainEvalSetup, runDomainEvals, saveDomainEvalResult } from "./domain-evals.js";
 
 mkdirSync(config.corpusPath, { recursive: true });
 export const db = new TrailDatabase(config.databasePath);
@@ -208,6 +209,15 @@ app.post("/api/policies/:id/evaluate", async (request, reply) => {
 });
 
 app.post("/api/benchmarks/run", async () => runBenchmark(db));
+app.get("/api/evals/domains", async () => getDomainEvalSetup());
+app.post("/api/evals/domains/run", async (request, reply) => {
+  const readiness = preflight();
+  if (!readiness.liveAi) return reply.code(503).send({ error: `Live AI is unavailable: ${readiness.missing.join(", ")}.` });
+  const repetitions = Number((request.body as { repetitions?: number } | undefined)?.repetitions ?? 3);
+  const result = await runDomainEvals(db, repetitions);
+  saveDomainEvalResult(result);
+  return result;
+});
 
 app.setErrorHandler((error, _request, reply) => {
   const typed = error as Error & { issues?: unknown };

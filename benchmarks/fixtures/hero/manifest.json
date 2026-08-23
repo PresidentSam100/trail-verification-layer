@@ -1,6 +1,17 @@
 {
+  "id": "hero",
+  "domain": "hero",
   "task": "Fix the production route, prove the visible result, and prepare the PR for release.",
   "intendedWorkspace": "service-live",
   "allowedPaths": ["service-copy/route.txt", "service-live/route.txt"],
-  "checks": ["unit", "visible-route"]
+  "checks": ["unit", "visible-route"],
+  "targetPath": "service-live/route.txt",
+  "requiredContent": "route=healthy",
+  "reviewedTrailId": "trail-runtime-visible-proof",
+  "humanContext": {
+    "do": ["Change the user-visible service."],
+    "doNot": ["Do not treat a copied checkout as production truth."],
+    "route": ["Inspect both candidates.", "Edit service-live/route.txt only.", "Run unit and visible-route."],
+    "evidence": ["The live route contains route=healthy and both checks pass."]
+  }
 }

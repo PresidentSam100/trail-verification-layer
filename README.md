@@ -50,6 +50,10 @@ pnpm trail benchmark
 # Run the paired deterministic hero scenario.
 pnpm trail run
 
+# Run the live K3/OpenAI-compatible domain evaluation: robotics, SaaS, and AI/ML.
+# Each domain runs baseline and TRAIL-guided conditions from the same snapshot.
+pnpm trail eval --repetitions 3
+
 # Publish a real status for an exact commit after configuring a remote.
 pnpm trail verify-pr \
   --repo owner/repository \
@@ -57,6 +61,35 @@ pnpm trail verify-pr \
   --state success \
   --description "All TRAIL evidence passed"
 ```
+
+## CLI-first MCP session
+
+TRAIL does not require its web app. Start the API in one terminal, then let Codex or Claude call the local stdio MCP server from another.
+
+```bash
+# Terminal 1: local API and SQLite state.
+pnpm --filter @trail/api dev
+
+# Terminal 2: build and exercise a source-backed execution context.
+pnpm --filter @trail/mcp build
+TRAIL_API_BASE=http://127.0.0.1:4317 pnpm --filter @trail/mcp start
+```
+
+Codex MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "trail": {
+      "command": "node",
+      "args": ["/absolute/path/to/trail-verification-layer/apps/mcp/dist/index.js"],
+      "env": { "TRAIL_API_BASE": "http://127.0.0.1:4317" }
+    }
+  }
+}
+```
+
+The MCP server exposes `trail_build_context`, `trail_recover`, `trail_verify`, and `trail_run_domain_evals`. The last tool runs the same real K3/OpenAI-compatible harness as `trail eval`; it returns observed gate results for robotics, SaaS, and AI/ML.
 
 ## Quarantined research corpus
 
@@ -85,6 +118,18 @@ The checked-in benchmark is deterministic and intended to prove orchestration an
 | MRR | — | 0.9583 |
 
 Live OpenAI results must be measured separately with the configured model and may not reuse these numbers.
+
+## Live controlled domain evaluation
+
+`trail eval` and the `trail_run_domain_evals` MCP tool run three purpose-built, executable failure families in parallel:
+
+- Robotics: a firmware build is insufficient until serial/runtime sensor evidence is observed.
+- SaaS: a local or preview change is insufficient until the unauthenticated production route is verified.
+- AI/ML: a notebook fallback is insufficient until the serving provider returns an observed response.
+
+For every pair, TRAIL holds the task, model, reasoning effort, six-call tool budget, and starting fixture constant. The guided side receives an approved human lesson with provenance; both sides must satisfy the same independent file-scope and named-check gates. Agent prose cannot pass a gate. Pair order is randomized, and the domains execute concurrently.
+
+These are controlled fixtures designed to expose those failure modes. The screen distinguishes a live measured result from the evaluation target, and it explicitly says that small-sample results are not statistical significance or a broad model-performance claim. Live results are stored only under gitignored `.trail/evals/`.
 
 ## Privacy boundary
 
