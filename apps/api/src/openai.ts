@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { TrailSchema, type IngestionPreview, type RetrievalMatch, type RetrievalRequest, type Trail } from "@trail/contracts";
+import { IntentDirectiveSchema, TrailSchema, type IngestionPreview, type IntentDirective, type RetrievalMatch, type RetrievalRequest, type Trail } from "@trail/contracts";
 import { config } from "./config.js";
 import { redactText, sourceHash } from "./redaction.js";
 
@@ -81,6 +81,53 @@ export async function extractTrail(preview: IngestionPreview): Promise<Trail> {
   });
 }
 
+const intentJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["directives"],
+  properties: {
+    directives: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["text", "type", "sourceQuote"],
+        properties: {
+          text: { type: "string" },
+          type: { type: "string", enum: ["goal", "required_action", "negative_constraint", "completion_criterion"] },
+          sourceQuote: { type: "string" },
+        },
+      },
+    },
+  },
+} as const;
+
+export async function extractIntentDirectives(task: string): Promise<IntentDirective[]> {
+  if (!config.openAiKey) throw new OpenAiUnavailableError();
+  const client = new OpenAI({ apiKey: config.openAiKey, baseURL: config.openAiBaseUrl || undefined });
+  const response = await client.responses.create({
+    model: config.extractorModel,
+    store: false,
+    reasoning: { effort: config.reasoningEffort },
+    instructions: "Extract only instructions explicitly supported by the current user request. Every sourceQuote must be an exact, contiguous substring copied from the request. Preserve negative constraints literally. Do not add implementation advice or facts from outside the request.",
+    input: task,
+    text: { format: { type: "json_schema", name: "intent_contract", strict: true, schema: intentJsonSchema } },
+  });
+  const parsed = JSON.parse(response.output_text) as { directives?: Array<{ text?: string; type?: string; sourceQuote?: string }> };
+  return (parsed.directives ?? []).flatMap((directive, index) => {
+    const sourceQuote = String(directive.sourceQuote ?? "").trim();
+    if (!sourceQuote || !task.includes(sourceQuote)) return [];
+    const result = IntentDirectiveSchema.safeParse({
+      id: `request-${index + 1}`,
+      text: String(directive.text ?? sourceQuote).trim(),
+      type: directive.type,
+      source: { kind: "current_request", sourceQuote },
+    });
+    return result.success ? [result.data] : [];
+  });
+}
+
 const rerankJsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -128,7 +175,7 @@ export async function rerankTrails(request: RetrievalRequest, matches: Retrieval
   const parsed = JSON.parse(response.output_text) as { orderedIds?: string[]; rationales?: Array<{ id: string; reason: string }> };
   const byId = new Map(matches.map((match) => [match.trail.id, match]));
   const orderedIds = (parsed.orderedIds ?? []).filter((id, index, ids) => byId.has(id) && ids.indexOf(id) === index);
-  if (orderedIds.length !== matches.length) throw new Error("OpenAI reranker returned an incomplete or invalid candidate set.");
+  if (orderedIds.length !== matches.length) throw new Error(`${config.providerLabel} reranker returned an incomplete or invalid candidate set.`);
   const reasons = new Map((parsed.rationales ?? []).map((item) => [item.id, item.reason]));
   return orderedIds.map((id, rank) => {
     const match = byId.get(id)!;
@@ -136,7 +183,7 @@ export async function rerankTrails(request: RetrievalRequest, matches: Retrieval
     return {
       ...match,
       score: Number((match.score + (matches.length - rank) / 10_000).toFixed(4)),
-      matchReasons: reason ? [...match.matchReasons, `OpenAI reranker: ${reason}`] : match.matchReasons,
+      matchReasons: reason ? [...match.matchReasons, `${config.providerLabel} reranker: ${reason}`] : match.matchReasons,
     };
   });
 }

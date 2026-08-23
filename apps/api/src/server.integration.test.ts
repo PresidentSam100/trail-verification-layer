@@ -38,4 +38,19 @@ describe("TRAIL API", () => {
     expect(completed.json().run.metrics.guided.verified).toBe(true);
     expect(completed.json().run.metrics.baseline.verified).toBe(false);
   });
+
+  it("compiles, persists, retrieves, and bounds recovery for agent context", async () => {
+    const compiled = await app.inject({ method: "POST", url: "/api/context/compile", payload: { task: "Fix the visible service. Do not edit a copied checkout.", environment: { client: "codex", workspace: "service-live" }, trigger: "start", evidenceState: {} } });
+    expect(compiled.statusCode).toBe(200);
+    const bundle = compiled.json().bundle;
+    expect(bundle.status).toBe("ready");
+    expect(bundle.compiledPrompt).toContain("DO NOT");
+    expect(bundle.compiledPrompt).toContain("Do not edit a copied checkout");
+    const stored = await app.inject({ method: "GET", url: `/api/context/${bundle.id}` });
+    expect(stored.json().bundle.originalPrompt).toContain("Fix the visible service");
+    const recovered = await app.inject({ method: "POST", url: `/api/context/${bundle.id}/recover`, payload: { failure: "Visible proof failed", evidenceState: {} } });
+    expect(recovered.json().bundle.parentId).toBe(bundle.id);
+    const stopped = await app.inject({ method: "POST", url: `/api/context/${recovered.json().bundle.id}/recover`, payload: { failure: "Second failure", evidenceState: {} } });
+    expect(stopped.json().bundle.status).toBe("blocked");
+  });
 });

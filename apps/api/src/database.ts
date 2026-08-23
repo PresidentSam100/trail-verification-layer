@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { IngestionPreview, RetrievalPolicy, RunEvent, RunMetrics, Trail } from "@trail/contracts";
+import type { ContextBundle, EvidenceObservation, IngestionPreview, RetrievalPolicy, RunEvent, RunMetrics, Trail } from "@trail/contracts";
 
 type RunRecord = {
   id: string;
@@ -82,6 +82,21 @@ export class TrailDatabase {
         body_json TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE IF NOT EXISTS context_bundles (
+        id TEXT PRIMARY KEY,
+        parent_id TEXT,
+        status TEXT NOT NULL,
+        body_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS evidence_observations (
+        id TEXT PRIMARY KEY,
+        bundle_id TEXT NOT NULL,
+        evidence_id TEXT NOT NULL,
+        body_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (bundle_id) REFERENCES context_bundles(id) ON DELETE CASCADE
+      );
     `);
   }
 
@@ -139,6 +154,31 @@ export class TrailDatabase {
   getIngestion(id: string): IngestionPreview | null {
     const row = this.db.prepare("SELECT body_json FROM ingestions WHERE id = ?").get(id) as { body_json: string } | undefined;
     return row ? (JSON.parse(row.body_json) as IngestionPreview) : null;
+  }
+
+  getIngestions(): IngestionPreview[] {
+    const rows = this.db.prepare("SELECT body_json FROM ingestions ORDER BY created_at DESC").all() as Array<{ body_json: string }>;
+    return rows.map((row) => JSON.parse(row.body_json) as IngestionPreview);
+  }
+
+  saveContextBundle(bundle: ContextBundle) {
+    this.db.prepare("INSERT INTO context_bundles (id, parent_id, status, body_json, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(bundle.id, bundle.parentId, bundle.status, JSON.stringify(bundle), bundle.createdAt);
+  }
+
+  getContextBundle(id: string): ContextBundle | null {
+    const row = this.db.prepare("SELECT body_json FROM context_bundles WHERE id = ?").get(id) as { body_json: string } | undefined;
+    return row ? JSON.parse(row.body_json) as ContextBundle : null;
+  }
+
+  saveEvidenceObservation(observation: EvidenceObservation) {
+    this.db.prepare("INSERT INTO evidence_observations (id, bundle_id, evidence_id, body_json, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(observation.id, observation.bundleId, observation.evidenceId, JSON.stringify(observation), observation.timestamp);
+  }
+
+  getEvidenceObservations(bundleId: string): EvidenceObservation[] {
+    const rows = this.db.prepare("SELECT body_json FROM evidence_observations WHERE bundle_id = ? ORDER BY created_at, id").all(bundleId) as Array<{ body_json: string }>;
+    return rows.map((row) => JSON.parse(row.body_json) as EvidenceObservation);
   }
 
   upsertSource(record: { pathHash: string; provider: string; sourceName: string; sizeBytes: number; modifiedAt: string; signals: string[] }) {

@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import { RetrievalRequestSchema, TrailSchema } from "@trail/contracts";
+import { ContextCompileRequestSchema, ContextVerifyRequestSchema, RetrievalRequestSchema, TrailSchema } from "@trail/contracts";
 import { config, preflight } from "./config.js";
 import { TrailDatabase } from "./database.js";
 import { previewTranscript } from "./adapters.js";
@@ -12,6 +12,8 @@ import { HarnessService } from "./harness.js";
 import { ensureActivePolicy, evaluatePolicy, proposePolicy } from "./policy.js";
 import { indexLocalSources } from "./source-index.js";
 import { runBenchmark } from "./benchmark.js";
+import { compileContext, recoverContext } from "./context.js";
+import { verifyContext } from "./verification.js";
 
 mkdirSync(config.corpusPath, { recursive: true });
 export const db = new TrailDatabase(config.databasePath);
@@ -25,6 +27,8 @@ await app.register(cors, { origin: [config.allowedOrigin, "http://localhost:4173
 app.get("/api/health", async () => ({ status: "ok", corpusCount: db.getTrails().length || corpusCount, ...preflight(), sourceIndex: db.sourceSummary() }));
 app.get("/api/trails", async () => ({ trails: db.getTrails() }));
 app.get("/api/policies", async () => ({ policies: db.getPolicies(), active: db.getActivePolicy() }));
+app.get("/api/ingestions", async () => ({ ingestions: db.getIngestions() }));
+app.get("/api/sources/candidates", async () => ({ candidates: db.sourceCandidates(50) }));
 app.get("/api/runs/:id", async (request, reply) => {
   const { id } = request.params as { id: string };
   const run = db.getRun(id);
@@ -76,9 +80,37 @@ app.post("/api/retrieve", async (request) => {
       ...result,
       policy: db.getActivePolicy(),
       rerankedByOpenAi: false,
-      rerankerError: error instanceof Error ? error.message : "OpenAI reranker failed.",
+      rerankerError: error instanceof Error ? error.message : `${config.providerLabel} reranker failed.`,
     };
   }
+});
+
+app.post("/api/context/compile", async (request) => {
+  const parsed = ContextCompileRequestSchema.parse(request.body);
+  return compileContext(db, parsed);
+});
+
+app.get("/api/context/:id", async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const bundle = db.getContextBundle(id);
+  return bundle ? { bundle, observations: db.getEvidenceObservations(id) } : reply.code(404).send({ error: "Context bundle not found" });
+});
+
+app.post("/api/context/:id/recover", async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const body = (request.body ?? {}) as { failure?: string; evidenceState?: Record<string, boolean> };
+  const bundle = db.getContextBundle(id);
+  if (!bundle) return reply.code(404).send({ error: "Context bundle not found" });
+  if (!body.failure?.trim()) return reply.code(400).send({ error: "failure is required" });
+  return recoverContext(db, bundle, body.failure.trim(), body.evidenceState ?? {});
+});
+
+app.post("/api/context/:id/verify", async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const bundle = db.getContextBundle(id);
+  if (!bundle) return reply.code(404).send({ error: "Context bundle not found" });
+  const parsed = ContextVerifyRequestSchema.parse(request.body);
+  return verifyContext(db, bundle, parsed.workspace, parsed.adapters);
 });
 
 app.post("/api/runs", async (request, reply) => {

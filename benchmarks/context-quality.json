@@ -1,0 +1,8 @@
+[
+  { "id": "negative-copy", "task": "Fix the visible checkout. Do not edit a copied checkout.", "mustRetain": "Do not edit a copied checkout" },
+  { "id": "negative-replace", "task": "Add the tool to the harness. Do not replace the harness.", "mustRetain": "Do not replace the harness" },
+  { "id": "negative-merge", "task": "Prepare the PR but never merge automatically.", "mustRetain": "never merge automatically" },
+  { "id": "negative-secrets", "task": "Verify the provider without logging tokens or secrets.", "mustRetain": "without logging tokens or secrets" },
+  { "id": "negative-scope", "task": "Update only the requested page and do not touch unrelated files.", "mustRetain": "do not touch unrelated files" },
+  { "id": "negative-proof", "task": "Prove the browser state; do not treat compilation as runtime proof.", "mustRetain": "do not treat compilation as runtime proof" }
+]

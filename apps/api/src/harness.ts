@@ -11,7 +11,7 @@ type Side = "baseline" | "guided";
 const task = {
   id: "hero-wrong-checkout-release",
   prompt: "Fix the production route, prove the visible result, and prepare the PR for release.",
-  model: "configured OpenAI model",
+  model: "configured live model",
   toolBudget: 6,
   startingCommit: "fixture/clean",
   environment: { os: "macos", host: "local", client: "codex", workspace: "service-live", branch: "demo/fix-route" },

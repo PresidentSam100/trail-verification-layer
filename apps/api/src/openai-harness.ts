@@ -40,7 +40,7 @@ export async function runOpenAiFixture(input: {
   const instructions = `You are the ${input.side} coding agent in a controlled benchmark. Work only through the provided functions. Inspect before writing, run both named checks, and stop after the checks. Never claim evidence you did not observe. You have at most ${toolBudget} tool calls.${trailContext}`;
   const conversation: unknown[] = [{ role: "user", content: sandbox.manifest.task }];
   const usage: AgentUsage = { inputTokens: 0, outputTokens: 0, toolCalls: 0 };
-  await input.emit("observation", "OpenAI Responses executor started in a disposable allowlisted fixture.", { model: config.agentModel, store: false });
+  await input.emit("observation", `${config.providerLabel} Responses executor started in a disposable allowlisted fixture.`, { model: config.agentModel, store: false });
   agentLoop: for (let turn = 0; turn < 8; turn += 1) {
     const response = await client.responses.create({
       model: config.agentModel,

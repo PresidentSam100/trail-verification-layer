@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "allowedChangedScopes": ["apps/", "packages/", "docs/", "benchmarks/", "corpus/", ".github/", "README.md", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.base.json", "vitest.config.ts", ".trailrc.json"],
+  "forbiddenPaths": [".env", ".trail/"],
+  "checks": [
+    { "name": "test", "command": ["pnpm", "test"] },
+    { "name": "build", "command": ["pnpm", "build"] }
+  ],
+  "http": [
+    { "name": "api-health", "url": "http://127.0.0.1:4317/api/health", "expectedStatus": 200 }
+  ],
+  "browser": [
+    { "name": "context-builder", "url": "http://127.0.0.1:4173/", "expectedStatus": 200, "contains": "TRAIL" }
+  ],
+  "provider": [
+    { "name": "configured-provider", "url": "http://127.0.0.1:4317/api/health", "expectedStatus": 200, "contains": "liveAi" }
+  ],
+  "runtime": [
+    { "name": "node-runtime", "command": ["node", "--version"], "contains": "v22" }
+  ]
+}
