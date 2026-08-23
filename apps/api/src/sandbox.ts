@@ -19,7 +19,7 @@ export class FixtureSandbox {
   }
 
   private safePath(path: string) {
-    const clean = normalize(path).replace(/^([/\\])+/, "");
+    const clean = normalize(path).replace(/^([/\\])+/, "").replaceAll("\\", "/");
     const resolved = resolve(this.root, clean);
     if (relative(this.root, resolved).startsWith("..")) throw new Error("Path escapes the disposable fixture workspace.");
     if (!this.manifest.allowedPaths.includes(clean)) throw new Error(`Path is not allowlisted: ${clean}`);

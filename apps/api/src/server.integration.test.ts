@@ -14,13 +14,22 @@ describe("TRAIL API", () => {
   });
 
   it("redacts an uploaded transcript and refuses fake extraction", async () => {
-    const previewResponse = await app.inject({ method: "POST", url: "/api/ingestions/preview", payload: { sourceName: "run.jsonl", text: JSON.stringify({ type: "user", message: { content: "token=supersecretvalue user@example.com" } }) } });
+    const previewResponse = await app.inject({ method: "POST", url: "/api/ingestions/preview", payload: { sourceName: "private-user@example.com.jsonl", text: JSON.stringify({ type: "user", message: { content: "token=supersecretvalue user@example.com" } }) } });
     expect(previewResponse.statusCode).toBe(200);
     const preview = previewResponse.json();
     expect(preview.redactedText).not.toContain("supersecretvalue");
+    const ingestionList = await app.inject({ method: "GET", url: "/api/ingestions" });
+    expect(ingestionList.json().ingestions.some((item: { id: string; status: string }) => item.id === preview.id && item.status === "previewed")).toBe(true);
     const extraction = await app.inject({ method: "POST", url: `/api/ingestions/${preview.id}/extract`, payload: {} });
     expect(extraction.statusCode).toBe(503);
     expect(extraction.json().liveAi).toBe(false);
+    const manualDraft = await app.inject({ method: "POST", url: `/api/ingestions/${preview.id}/draft-template`, payload: {} });
+    expect(manualDraft.statusCode).toBe(200);
+    expect(manualDraft.json().trail.reviewStatus).toBe("draft");
+    expect(JSON.stringify(manualDraft.json())).not.toContain("supersecretvalue");
+    expect(JSON.stringify(manualDraft.json())).not.toContain("private-user@example.com");
+    const prematureApproval = await app.inject({ method: "POST", url: `/api/trails/${manualDraft.json().trail.id}/approve`, payload: manualDraft.json().trail });
+    expect(prematureApproval.statusCode).toBe(422);
     const liveRun = await app.inject({ method: "POST", url: "/api/runs", payload: { executor: "openai-responses" } });
     expect(liveRun.statusCode).toBe(503);
     expect(liveRun.json().liveAi).toBe(false);
@@ -32,8 +41,11 @@ describe("TRAIL API", () => {
     expect(retrieval.json().matches[0].trail.id).toBe("trail-visible-checkout");
     const created = await app.inject({ method: "POST", url: "/api/runs", payload: { executor: "deterministic-fixture", speedMs: 0 } });
     const runId = created.json().runId;
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    const completed = await app.inject({ method: "GET", url: `/api/runs/${runId}` });
+    let completed = await app.inject({ method: "GET", url: `/api/runs/${runId}` });
+    for (let attempt = 0; attempt < 20 && completed.json().run.status === "running"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      completed = await app.inject({ method: "GET", url: `/api/runs/${runId}` });
+    }
     expect(completed.json().run.status).toBe("completed");
     expect(completed.json().run.metrics.guided.verified).toBe(true);
     expect(completed.json().run.metrics.baseline.verified).toBe(false);

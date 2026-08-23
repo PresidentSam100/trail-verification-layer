@@ -15,6 +15,7 @@ type RunRecord = {
 
 export class TrailDatabase {
   readonly db: DatabaseSync;
+  private ftsAvailable = false;
 
   constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
@@ -33,15 +34,17 @@ export class TrailDatabase {
         approved_at TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
-      CREATE VIRTUAL TABLE IF NOT EXISTS trails_fts USING fts5(
-        trail_id UNINDEXED,
-        content
+      CREATE TABLE IF NOT EXISTS trails_search (
+        trail_id TEXT PRIMARY KEY,
+        content TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS ingestions (
         id TEXT PRIMARY KEY,
         format TEXT NOT NULL,
         source_name TEXT NOT NULL,
         body_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'previewed',
+        trail_id TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS sources (
@@ -83,6 +86,21 @@ export class TrailDatabase {
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    try {
+      this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS trails_fts USING fts5(
+        trail_id UNINDEXED,
+        content
+      );`);
+      this.ftsAvailable = true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("no such module: fts5")) throw error;
+    }
+    const ingestionColumns = new Set(
+      (this.db.prepare("PRAGMA table_info(ingestions)").all() as Array<{ name: string }>).map((column) => column.name),
+    );
+    if (!ingestionColumns.has("status")) this.db.exec("ALTER TABLE ingestions ADD COLUMN status TEXT NOT NULL DEFAULT 'previewed'");
+    if (!ingestionColumns.has("trail_id")) this.db.exec("ALTER TABLE ingestions ADD COLUMN trail_id TEXT");
   }
 
   close() {
@@ -97,7 +115,6 @@ export class TrailDatabase {
         ON CONFLICT(id) DO UPDATE SET status=excluded.status, task_family=excluded.task_family,
         body_json=excluded.body_json, approved_at=excluded.approved_at`)
       .run(trail.id, trail.reviewStatus, trail.taskFamily, JSON.stringify(trail), approvedAt);
-    this.db.prepare("DELETE FROM trails_fts WHERE trail_id = ?").run(trail.id);
     const searchText = [
       trail.title,
       trail.summary,
@@ -107,7 +124,12 @@ export class TrailDatabase {
       ...trail.applicability,
       ...trail.tags,
     ].join(" ");
-    this.db.prepare("INSERT INTO trails_fts (trail_id, content) VALUES (?, ?)").run(trail.id, searchText);
+    this.db.prepare(`INSERT INTO trails_search (trail_id, content) VALUES (?, ?)
+      ON CONFLICT(trail_id) DO UPDATE SET content=excluded.content`).run(trail.id, searchText);
+    if (this.ftsAvailable) {
+      this.db.prepare("DELETE FROM trails_fts WHERE trail_id = ?").run(trail.id);
+      this.db.prepare("INSERT INTO trails_fts (trail_id, content) VALUES (?, ?)").run(trail.id, searchText);
+    }
   }
 
   getTrails(status = "approved"): Trail[] {
@@ -123,6 +145,19 @@ export class TrailDatabase {
   searchTrailIds(query: string, limit = 20): Array<{ id: string; rank: number }> {
     const tokens = query.toLowerCase().match(/[a-z0-9_\-]{3,}/g)?.slice(0, 18) ?? [];
     if (tokens.length === 0) return [];
+    if (!this.ftsAvailable) {
+      const unique = [...new Set(tokens)];
+      const rows = this.db.prepare("SELECT trail_id, content FROM trails_search").all() as Array<{ trail_id: string; content: string }>;
+      return rows
+        .map((row) => {
+          const content = row.content.toLowerCase();
+          const matches = unique.reduce((sum, token) => sum + (content.includes(token) ? 1 : 0), 0);
+          return { id: row.trail_id, rank: matches ? -matches / unique.length : 0 };
+        })
+        .filter((row) => row.rank < 0)
+        .sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id))
+        .slice(0, limit);
+    }
     const ftsQuery = [...new Set(tokens)].map((token) => `"${token.replaceAll('"', '')}"`).join(" OR ");
     const rows = this.db
       .prepare("SELECT trail_id, bm25(trails_fts) AS rank FROM trails_fts WHERE trails_fts MATCH ? ORDER BY rank LIMIT ?")
@@ -132,13 +167,48 @@ export class TrailDatabase {
 
   saveIngestion(preview: IngestionPreview) {
     this.db
-      .prepare("INSERT OR REPLACE INTO ingestions (id, format, source_name, body_json) VALUES (?, ?, ?, ?)")
+      .prepare("INSERT OR REPLACE INTO ingestions (id, format, source_name, body_json, status, trail_id) VALUES (?, ?, ?, ?, 'previewed', NULL)")
       .run(preview.id, preview.format, preview.sourceName, JSON.stringify(preview));
   }
 
   getIngestion(id: string): IngestionPreview | null {
     const row = this.db.prepare("SELECT body_json FROM ingestions WHERE id = ?").get(id) as { body_json: string } | undefined;
     return row ? (JSON.parse(row.body_json) as IngestionPreview) : null;
+  }
+
+  listIngestions(limit = 30) {
+    const rows = this.db.prepare(`SELECT id, format, source_name, body_json, status, trail_id, created_at
+      FROM ingestions ORDER BY created_at DESC, id DESC LIMIT ?`).all(limit) as Array<{
+        id: string;
+        format: IngestionPreview["format"];
+        source_name: string;
+        body_json: string;
+        status: "previewed" | "drafted" | "approved";
+        trail_id: string | null;
+        created_at: string;
+      }>;
+    return rows.map((row) => {
+      const preview = JSON.parse(row.body_json) as IngestionPreview;
+      return {
+        id: row.id,
+        format: row.format,
+        sourceName: row.source_name,
+        status: row.status,
+        trailId: row.trail_id,
+        redactionCount: preview.redactionCount,
+        candidateSignals: preview.candidateSignals,
+        requiresReview: preview.requiresReview,
+        createdAt: row.created_at,
+      };
+    });
+  }
+
+  markIngestionDrafted(id: string, trailId: string) {
+    this.db.prepare("UPDATE ingestions SET status = 'drafted', trail_id = ? WHERE id = ?").run(trailId, id);
+  }
+
+  markIngestionApproved(trailId: string) {
+    this.db.prepare("UPDATE ingestions SET status = 'approved' WHERE trail_id = ?").run(trailId);
   }
 
   upsertSource(record: { pathHash: string; provider: string; sourceName: string; sizeBytes: number; modifiedAt: string; signals: string[] }) {

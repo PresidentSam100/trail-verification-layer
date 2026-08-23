@@ -12,7 +12,41 @@ type Health = {
   extractorModel: string;
   missing: string[];
   deterministicHarness: boolean;
+  sourceRoots: { codex: boolean; claude: boolean };
   sourceIndex: { total: number; providers: Array<{ provider: string; count: number; bytes: number }>; signals: Record<string, number> };
+};
+type IngestionRecord = {
+  id: string;
+  format: IngestionPreview["format"];
+  sourceName: string;
+  status: "previewed" | "drafted" | "approved";
+  trailId: string | null;
+  redactionCount: number;
+  candidateSignals: string[];
+  requiresReview: boolean;
+  createdAt: string;
+};
+type SourceCandidate = {
+  pathHash: string;
+  provider: string;
+  sourceName: string;
+  sizeBytes: number;
+  modifiedAt: string;
+  signals: string[];
+  score: number;
+};
+type SourceInventory = {
+  total: number;
+  providers: Array<{ provider: string; count: number; bytes: number }>;
+  signals: Record<string, number>;
+  shortlist: SourceCandidate[];
+  roots: { codex: boolean; claude: boolean };
+};
+type ResearchCorpus = {
+  status: "ready" | "not-indexed";
+  source: { id: string; dataset: string; expectedRows: number; compilationLicense: string; itemLicensePolicy: string; trustTier: string };
+  stats: null | { rowsSeen?: number; uniqueSkills?: number; quarantined?: number; rowsRejected?: number };
+  safety: { executable: false; promotable: false; rawBodiesReturnedByApi: false; automaticPromotion: false };
 };
 type RunRecord = { id: string; status: string; executor: string; metrics: Record<string, RunMetrics> };
 type Benchmark = {
@@ -32,7 +66,7 @@ type Benchmark = {
 const navigation: Array<{ id: Tab; label: string }> = [
   { id: "proof", label: "Live proof" },
   { id: "corpus", label: "Trail corpus" },
-  { id: "ingest", label: "Contribute" },
+  { id: "ingest", label: "Data intake" },
   { id: "policy", label: "RSI policy" },
 ];
 
@@ -54,7 +88,7 @@ function AppShell({ tab, setTab, health, children }: { tab: Tab; setTab: (tab: T
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button className="brand" onClick={() => setTab("proof")}><Mark /><span>TRAIL</span><small>Trajectory Retrieval & Intent Alignment Layer</small></button>
+        <button className="brand" aria-label="TRAIL live proof" onClick={() => setTab("proof")}><Mark /><span>TRAIL</span><small>Trajectory Retrieval & Intent Alignment Layer</small></button>
         <nav aria-label="Primary navigation">
           {navigation.map((item) => <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}>{item.label}</button>)}
         </nav>
@@ -211,59 +245,203 @@ function CorpusView({ trails }: { trails: Trail[] }) {
   );
 }
 
+function bytes(value: number) {
+  if (!value) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  return `${(value / 1024 ** index).toFixed(index > 1 ? 1 : 0)} ${units[index]}`;
+}
+
 function IngestView({ health, onApproved }: { health: Health | null; onApproved: (trail: Trail) => void }) {
   const [preview, setPreview] = useState<IngestionPreview | null>(null);
   const [draft, setDraft] = useState<Trail | null>(null);
   const [json, setJson] = useState("");
+  const [records, setRecords] = useState<IngestionRecord[]>([]);
+  const [sources, setSources] = useState<SourceInventory | null>(null);
+  const [research, setResearch] = useState<ResearchCorpus | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [message, setMessage] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
 
-  const choose = async (file: File) => {
-    setBusy(true); setMessage(""); setDraft(null);
-    try {
-      const text = await file.text();
-      const result = await api<IngestionPreview>("/api/ingestions/preview", { method: "POST", body: JSON.stringify({ sourceName: file.name, text }) });
-      setPreview(result);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Preview failed"); } finally { setBusy(false); }
+  const reloadIntake = async () => {
+    const [ingestionResult, sourceResult, researchResult] = await Promise.all([
+      api<{ ingestions: IngestionRecord[] }>("/api/ingestions"),
+      api<SourceInventory>("/api/sources"),
+      api<ResearchCorpus>("/api/research-corpus"),
+    ]);
+    setRecords(ingestionResult.ingestions);
+    setSources(sourceResult);
+    setResearch(researchResult);
   };
+
+  useEffect(() => { void reloadIntake().catch(() => undefined); }, []);
+
+  const select = async (id: string) => {
+    setBusy(true); setMessage(null); setDraft(null); setJson("");
+    try { setPreview(await api<IngestionPreview>(`/api/ingestions/${id}`)); }
+    catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Could not load that ingestion." }); }
+    finally { setBusy(false); }
+  };
+
+  const ingestFiles = async (files: File[]) => {
+    if (!files.length) return;
+    setBusy(true); setMessage(null); setDraft(null); setJson("");
+    try {
+      const bounded = files.slice(0, 8);
+      const tooLarge = bounded.find((file) => file.size > 12 * 1024 * 1024);
+      if (tooLarge) throw new Error(`${tooLarge.name} is larger than the 12 MB intake limit.`);
+      const previews: IngestionPreview[] = [];
+      for (const file of bounded) {
+        const text = await file.text();
+        previews.push(await api<IngestionPreview>("/api/ingestions/preview", {
+          method: "POST",
+          body: JSON.stringify({ sourceName: file.name, text }),
+        }));
+      }
+      setPreview(previews[0] ?? null);
+      setMessage({ tone: "success", text: `${previews.length} transcript${previews.length === 1 ? "" : "s"} redacted and added to review.` });
+      await reloadIntake();
+    } catch (error) {
+      setMessage({ tone: "error", text: error instanceof Error ? error.message : "Intake failed." });
+    } finally { setBusy(false); }
+  };
+
+  const loadSample = async () => {
+    setBusy(true); setMessage(null); setDraft(null); setJson("");
+    try {
+      const result = await api<IngestionPreview>("/api/ingestions/sample", { method: "POST", body: "{}" });
+      setPreview(result);
+      setMessage({ tone: "info", text: "Sample Codex run loaded. Review the exact redacted payload below." });
+      await reloadIntake();
+    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Sample intake failed." }); }
+    finally { setBusy(false); }
+  };
+
+  const scanSources = async () => {
+    setScanning(true); setMessage(null);
+    try {
+      const result = await api<SourceInventory & { indexed: number }>("/api/sources/index", { method: "POST", body: "{}" });
+      setSources(result);
+      setMessage({ tone: "success", text: `Indexed metadata and route signals for ${result.indexed} local runs. Raw transcripts were not copied.` });
+    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Source scan failed." }); }
+    finally { setScanning(false); }
+  };
+
   const extract = async () => {
     if (!preview) return;
-    setBusy(true); setMessage("");
+    setBusy(true); setMessage(null);
     try {
       const result = await api<{ trail: Trail }>(`/api/ingestions/${preview.id}/extract`, { method: "POST", body: "{}" });
       setDraft(result.trail); setJson(JSON.stringify(result.trail, null, 2));
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Extraction failed"); } finally { setBusy(false); }
+      setMessage({ tone: "info", text: "Draft extracted. Nothing is trusted until you approve the contract." });
+      await reloadIntake();
+    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Extraction failed." }); }
+    finally { setBusy(false); }
   };
+
+  const startManualDraft = async () => {
+    if (!preview) return;
+    setBusy(true); setMessage(null);
+    try {
+      const result = await api<{ trail: Trail }>(`/api/ingestions/${preview.id}/draft-template`, { method: "POST", body: "{}" });
+      setDraft(result.trail); setJson(JSON.stringify(result.trail, null, 2));
+      setMessage({ tone: "info", text: "Manual template created. Replace every placeholder with evidence from the redacted payload before approval." });
+      await reloadIntake();
+    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Could not create a manual draft." }); }
+    finally { setBusy(false); }
+  };
+
   const approve = async () => {
     if (!draft) return;
-    setBusy(true); setMessage("");
+    setBusy(true); setMessage(null);
     try {
       const parsed = JSON.parse(json) as Trail;
       const result = await api<{ trail: Trail; path: string }>(`/api/trails/${draft.id}/approve`, { method: "POST", body: JSON.stringify(parsed) });
-      onApproved(result.trail); setMessage(`Approved and exported as ${result.trail.id}.trail.json`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Approval failed"); } finally { setBusy(false); }
+      onApproved(result.trail);
+      setMessage({ tone: "success", text: `Approved ${result.trail.id}. It is now eligible for retrieval.` });
+      await reloadIntake();
+    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Approval failed." }); }
+    finally { setBusy(false); }
   };
+
+  const providers = new Map((sources?.providers ?? health?.sourceIndex.providers ?? []).map((item) => [item.provider, item]));
+  const sourceTotal = sources?.total ?? health?.sourceIndex.total ?? 0;
 
   return (
     <div className="view content-view ingest-view">
-      <div className="page-heading"><div><p className="eyebrow">LOCAL REDACTION BEFORE ANY API CALL</p><h1>Turn a run into a trail</h1><p>Upload a Codex or Claude JSONL transcript. Raw content stays in memory; only the locally redacted excerpt can be sent for extraction.</p></div></div>
-      <div className="ingest-grid">
-        <section className="panel upload-panel">
-          <span className="step-number">01</span><h2>Choose a transcript</h2><p>Native adapters understand Codex response items and Claude message/tool-result records.</p>
-          <label className="file-picker"><input type="file" accept=".jsonl,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void choose(file); }} /><span>{busy ? "Reading locally…" : "Select .jsonl file"}</span></label>
-          {preview && <div className="preview-meta"><b>{preview.format.toUpperCase()}</b><span>{preview.redactionCount} redactions</span><span>{preview.candidateSignals.length} route signals</span></div>}
+      <div className="page-heading intake-heading">
+        <div><p className="eyebrow">INGESTION CONTROL PLANE</p><h1>Make experience retrievable.</h1><p>Bring in real Codex and Claude runs, remove sensitive data locally, extract a strict route contract, and promote it only after human review.</p></div>
+        <div className="heading-stats"><strong>{sourceTotal}</strong><span>runs indexed</span><strong>{records.length}</strong><span>review items</span></div>
+      </div>
+
+      <section className="pipeline-ribbon" aria-label="Ingestion lifecycle">
+        <div className="complete"><span>01</span><b>Discover</b><small>Metadata + signals</small></div>
+        <div className={preview ? "complete" : "active"}><span>02</span><b>Redact</b><small>Local privacy pass</small></div>
+        <div className={draft ? "complete" : preview ? "active" : ""}><span>03</span><b>Structure</b><small>Draft route contract</small></div>
+        <div className={records.some((record) => record.status === "approved") ? "complete" : draft ? "active" : ""}><span>04</span><b>Approve</b><small>Retrieval eligible</small></div>
+      </section>
+
+      <div className="source-grid">
+        {["codex", "claude"].map((provider) => {
+          const inventory = providers.get(provider);
+          const detected = sources?.roots[provider as keyof SourceInventory["roots"]] ?? health?.sourceRoots?.[provider as keyof Health["sourceRoots"]];
+          return <article className="source-card panel" key={provider}>
+            <div className="source-card-top"><span className={`source-icon ${provider}`}>{provider === "codex" ? "C" : "A"}</span><span className={`connector-state ${detected ? "ready" : "missing"}`}><i />{detected ? "Detected" : "Not found"}</span></div>
+            <h2>{provider === "codex" ? "Codex sessions" : "Claude projects"}</h2>
+            <p>Index hashes, timestamps, size, and recovery signals. Transcript bodies stay at their original path.</p>
+            <footer><strong>{inventory?.count ?? 0}</strong><span>runs</span><strong>{bytes(inventory?.bytes ?? 0)}</strong><span>observed</span></footer>
+          </article>;
+        })}
+        <article className="source-card source-control panel">
+          <div><span className="step-number">SOURCE DISCOVERY</span><h2>Refresh the local index</h2><p>Use the shortlist to find runs with corrections, tool failures, environment changes, and release evidence.</p></div>
+          <button className="secondary" disabled={scanning} onClick={() => void scanSources()}>{scanning ? "Scanning…" : "Scan this device"}<span>↻</span></button>
+        </article>
+      </div>
+
+      {message && <div className={`intake-message ${message.tone}`} role="status"><i />{message.text}</div>}
+
+      <div className="intake-workspace">
+        <section className="panel intake-queue">
+          <div className="section-heading"><div><span className="step-number">01 · INTAKE</span><h2>Add trajectory data</h2></div><button className="text-button" disabled={busy} onClick={() => void loadSample()}>Try sample</button></div>
+          <label className={`file-picker ${busy ? "busy" : ""}`}>
+            <input type="file" multiple accept=".jsonl,.json,application/json" onChange={(event) => { void ingestFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }} />
+            <span className="upload-glyph">＋</span><b>{busy ? "Processing locally…" : "Drop or choose transcript files"}</b><small>Codex or Claude JSONL · up to 8 files · 12 MB each</small>
+          </label>
+          <div className="queue-heading"><span>Review queue</span><b>{records.length}</b></div>
+          <div className="queue-list">
+            {records.length === 0 && <p className="empty-queue">No intake records yet. Load the sample to test redaction without exposing private data.</p>}
+            {records.slice(0, 8).map((record) => <button key={record.id} className={`queue-row ${preview?.id === record.id ? "selected" : ""}`} onClick={() => void select(record.id)}>
+              <span className={`format-badge ${record.format}`}>{record.format.slice(0, 1).toUpperCase()}</span>
+              <span className="queue-copy"><b>{record.sourceName}</b><small>{record.candidateSignals.length ? record.candidateSignals.join(" · ") : "No strong route signal"}</small></span>
+              <span className={`review-status ${record.status}`}>{record.status}</span>
+            </button>)}
+          </div>
         </section>
+
         <section className="panel redaction-panel">
-          <span className="step-number">02</span><h2>Review redactions</h2>
-          <pre>{preview?.redactedText.slice(0, 7_000) || "The redacted excerpt appears here. Secrets, personal paths, emails, phone numbers, and repository URLs are removed before extraction."}</pre>
+          <div className="section-heading"><div><span className="step-number">02 · PRIVACY REVIEW</span><h2>{preview ? preview.sourceName : "Redacted payload"}</h2></div>{preview && <span className={`format-label ${preview.format}`}>{preview.format}</span>}</div>
+          {preview ? <>
+            <div className="preview-meta"><b>{preview.redactionCount} REDACTIONS</b><span>{preview.candidateSignals.length} route signals</span><span>{preview.requiresReview ? "review required" : "clean pass"}</span></div>
+            <pre>{preview.redactedText.slice(0, 12_000)}</pre>
+          </> : <div className="redaction-empty"><span>⌁</span><h3>Select an intake record</h3><p>The exact text eligible for extraction will appear here. Secrets, personal paths, contact details, and repository URLs are removed first.</p></div>}
         </section>
       </div>
+
       <section className="panel approval-panel">
-        <div><span className="step-number">03</span><h2>Extract, edit, approve</h2><p>Extraction uses <code>{health?.extractorModel ?? "gpt-5.6-luna"}</code> with <code>store: false</code>. Approval exports only the reviewed contract.</p></div>
-        <button className="secondary" disabled={!preview || !health?.liveAi || busy} onClick={() => void extract()}>{health?.liveAi ? "Extract draft trail" : "OpenAI key required"}</button>
-        {draft && <textarea aria-label="Trail JSON" value={json} onChange={(event) => setJson(event.target.value)} />}
-        {draft && <button className="primary compact" disabled={busy} onClick={() => void approve()}>Approve public trail <span>→</span></button>}
-        {message && <p className={message.startsWith("Approved") ? "success-copy" : "error-copy"}>{message}</p>}
+        <div className="approval-intro"><span className="step-number">03–04 · STRUCTURE + APPROVE</span><h2>Promote a reviewed contract</h2><p>Extraction uses <code>{health?.extractorModel ?? "gpt-5.6-luna"}</code> with <code>store: false</code>. A draft cannot enter retrieval until you validate and approve its evidence contract.</p></div>
+        <div className="approval-actions">
+          <span className={`ai-state ${health?.liveAi ? "ready" : "missing"}`}><i />{health?.liveAi ? "Extractor connected" : "Extractor needs OPENAI_API_KEY"}</span>
+          <button className="text-button manual-draft" disabled={!preview || busy} onClick={() => void startManualDraft()}>Start manual draft</button>
+          <button className="secondary" disabled={!preview || !health?.liveAi || busy} onClick={() => void extract()}>{busy ? "Working…" : "Extract draft trail"}<span>→</span></button>
+        </div>
+        {draft && <div className="contract-editor"><div><span>DRAFT CONTRACT</span><b>{draft.id}</b></div><textarea aria-label="Trail JSON" value={json} onChange={(event) => setJson(event.target.value)} /></div>}
+        {draft && <div className="approval-submit"><p>Approval makes this redacted contract available to the runtime retriever. It does not publish raw transcript content.</p><button className="primary compact" disabled={busy} onClick={() => void approve()}>Approve into corpus <span>✓</span></button></div>}
+      </section>
+
+      <section className="trust-boundary panel">
+        <div><span>RESEARCH DATA · {research?.status === "ready" ? "INDEXED" : "PINNED"}</span><h2>{research?.status === "ready" ? `${(research.stats?.uniqueSkills ?? research.source.expectedRows).toLocaleString()} unique skills, quarantined.` : `${(research?.source.expectedRows ?? 138_133).toLocaleString()} records pinned for import.`}</h2></div>
+        <p>{research?.source.dataset ?? "External skill metadata"} can improve discovery, but it is never executable, trusted, or automatically promoted. Every route that reaches the runtime corpus still crosses the same redaction and human-review boundary.</p>
+        <div className="trust-tags"><span>metadata only</span><span>license unresolved</span><span>risk scanned</span><span>no auto-install</span></div>
       </section>
     </div>
   );

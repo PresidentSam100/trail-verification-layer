@@ -7,6 +7,7 @@ TRAIL turns prior Codex and Claude trajectories into reviewed, machine-readable 
 ## What works
 
 - Native Codex and Claude JSONL adapters.
+- A durable ingestion queue with local source discovery, batch upload, redaction review, and explicit `previewed → drafted → approved` promotion.
 - A privacy-safe historical review manifest anchored to hashed, redacted record ranges from real local runs.
 - Local redaction before any OpenAI request.
 - Reviewed trail contracts with provenance, applicability, invalidators, actions, and evidence.
@@ -29,6 +30,8 @@ pnpm dev
 ```
 
 Open [http://127.0.0.1:4173](http://127.0.0.1:4173). The API runs at `http://127.0.0.1:4317`.
+
+Open **Data intake** to scan local Codex/Claude history metadata, upload up to eight transcripts at a time, or load the checked-in sample run. Source scans keep only hashes, timestamps, sizes, and route signals; uploaded raw transcript text is parsed in memory and only its redacted review payload is retained. If an OpenAI key is not configured, start a guarded manual template instead; unresolved placeholders are rejected at the approval boundary.
 
 Without `OPENAI_API_KEY`, deterministic proof and retrieval remain available, while extraction and live agent runs return an explicit unavailable state. Nothing is presented as live AI.
 
@@ -54,6 +57,19 @@ pnpm trail verify-pr \
   --state success \
   --description "All TRAIL evidence passed"
 ```
+
+## Quarantined research corpus
+
+TRAIL can also build a metadata-only discovery index from the pinned SkillMD-138K source. These records never become instructions, installs, or runtime routes, and raw skill bodies are not stored in the index or returned by its API.
+
+```bash
+pnpm skills sync
+pnpm skills index
+pnpm skills status
+pnpm skills search "browser verification" --max-risk medium
+```
+
+See [the corpus trust, provenance, and license notes](docs/skill-corpus.md). The compilation is CC-BY-4.0, but individual-file licenses are unresolved; every result remains quarantined and non-promotable.
 
 The repository's GitHub workflow exposes a check named `trail/verification`. Configure that check as required in the repository ruleset to block merge until it passes.
 

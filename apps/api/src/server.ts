@@ -1,10 +1,12 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { RetrievalRequestSchema, TrailSchema } from "@trail/contracts";
+import { loadActiveGeneration, loadSourceManifest } from "@trail/skill-corpus";
 import { config, preflight } from "./config.js";
 import { TrailDatabase } from "./database.js";
-import { previewTranscript } from "./adapters.js";
+import { createManualTrailDraft, previewTranscript } from "./adapters.js";
 import { extractTrail, OpenAiUnavailableError, rerankTrails } from "./openai.js";
 import { loadCorpus, publishTrail } from "./corpus.js";
 import { retrieveTrails } from "./retrieval.js";
@@ -25,13 +27,46 @@ await app.register(cors, { origin: [config.allowedOrigin, "http://localhost:4173
 app.get("/api/health", async () => ({ status: "ok", corpusCount: db.getTrails().length || corpusCount, ...preflight(), sourceIndex: db.sourceSummary() }));
 app.get("/api/trails", async () => ({ trails: db.getTrails() }));
 app.get("/api/policies", async () => ({ policies: db.getPolicies(), active: db.getActivePolicy() }));
+app.get("/api/sources", async () => ({ ...db.sourceSummary(), shortlist: db.sourceCandidates(), roots: preflight().sourceRoots }));
+app.get("/api/research-corpus", async () => {
+  const source = loadSourceManifest();
+  const active = loadActiveGeneration();
+  const stats = active ? JSON.parse(readFileSync(join(active.directory, active.manifest.stats.file), "utf8")) as Record<string, unknown> : null;
+  return {
+    status: active ? "ready" : "not-indexed",
+    source: {
+      id: source.id,
+      dataset: source.dataset,
+      revision: source.revision,
+      expectedRows: source.rows,
+      compilationLicense: source.compilationLicense,
+      itemLicensePolicy: source.itemLicensePolicy,
+      trustTier: source.trustTier,
+    },
+    stats,
+    safety: { executable: false, promotable: false, rawBodiesReturnedByApi: false, automaticPromotion: false },
+  };
+});
+app.get("/api/ingestions", async () => ({ ingestions: db.listIngestions() }));
+app.get("/api/ingestions/:id", async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const ingestion = db.getIngestion(id);
+  return ingestion ?? reply.code(404).send({ error: "Ingestion not found" });
+});
 app.get("/api/runs/:id", async (request, reply) => {
   const { id } = request.params as { id: string };
   const run = db.getRun(id);
   return run ? { run, events: db.getRunEvents(id) } : reply.code(404).send({ error: "Run not found" });
 });
 
-app.post("/api/sources/index", async () => indexLocalSources(db));
+app.post("/api/sources/index", async () => ({ ...indexLocalSources(db), roots: preflight().sourceRoots }));
+
+app.post("/api/ingestions/sample", async () => {
+  const path = join(config.benchmarkPath, "fixtures", "sample-codex.jsonl");
+  const preview = previewTranscript("sample-codex.jsonl", readFileSync(path, "utf8"));
+  db.saveIngestion(preview);
+  return preview;
+});
 
 app.post("/api/ingestions/preview", async (request, reply) => {
   const body = request.body as { sourceName?: string; text?: string };
@@ -48,6 +83,7 @@ app.post("/api/ingestions/:id/extract", async (request, reply) => {
   try {
     const trail = await extractTrail(ingestion);
     db.upsertTrail(trail);
+    db.markIngestionDrafted(id, trail.id);
     return { trail, liveAi: true };
   } catch (error) {
     if (error instanceof OpenAiUnavailableError) return reply.code(503).send({ error: error.message, missing: ["OPENAI_API_KEY"], liveAi: false });
@@ -55,11 +91,27 @@ app.post("/api/ingestions/:id/extract", async (request, reply) => {
   }
 });
 
+app.post("/api/ingestions/:id/draft-template", async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const ingestion = db.getIngestion(id);
+  if (!ingestion) return reply.code(404).send({ error: "Ingestion not found" });
+  const trail = createManualTrailDraft(ingestion);
+  db.upsertTrail(trail);
+  db.markIngestionDrafted(id, trail.id);
+  return { trail, liveAi: false };
+});
+
 app.post("/api/trails/:id/approve", async (request, reply) => {
   const { id } = request.params as { id: string };
   const draft = TrailSchema.parse(request.body);
   if (draft.id !== id) return reply.code(400).send({ error: "Trail id does not match route" });
-  return publishTrail(db, draft);
+  const serialized = JSON.stringify(draft);
+  if (draft.tags.includes("manual-template") || serialized.includes("Replace this template") || serialized.includes("Replace with an exact expected value")) {
+    return reply.code(422).send({ error: "Replace every manual-template placeholder and remove the manual-template tag before approval." });
+  }
+  const published = publishTrail(db, draft);
+  db.markIngestionApproved(published.trail.id);
+  return published;
 });
 
 app.post("/api/retrieve", async (request) => {
