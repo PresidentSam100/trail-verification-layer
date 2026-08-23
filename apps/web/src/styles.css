@@ -123,6 +123,7 @@ code { font-family: var(--mono); font-size: 0.9em; color: #baf7cd; }
 .benchmark-metrics span { display: block; font-size: 11px; margin-top: 6px; }
 .benchmark-metrics small { color: var(--muted); font-size: 9px; }
 
+
 .content-view { padding-top: 72px; }
 .page-heading { display: flex; justify-content: space-between; gap: 60px; align-items: end; margin-bottom: 48px; }
 .page-heading h1 { font-size: clamp(42px, 5vw, 72px); }
