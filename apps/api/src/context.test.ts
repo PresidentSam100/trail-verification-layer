@@ -22,12 +22,15 @@ describe("external human context compiler", () => {
     const task = "Fix the production route in the user-visible service checkout. Do not edit a copied checkout. Prove the browser-visible result before release.";
     const result = await compileContext(db, { task, environment: { client: "codex", workspace: "service-live" }, trigger: "start", evidenceState: {} });
     expect(result.bundle.status).toBe("ready");
+    expect(result.bundle.environment.path).toBeTruthy();
+    expect(result.bundle.environment.head).toMatch(/^[a-f0-9]{40}$/);
     expect(result.bundle.matchedTrails[0]?.id).toBe("trail-visible-checkout");
     expect(result.bundle.matchedTrails).toHaveLength(1);
     const negative = result.bundle.directives.find((item) => item.source.kind === "current_request" && item.type === "negative_constraint");
     expect(negative?.source.sourceQuote).toBe("Do not edit a copied checkout");
     expect(task).toContain(negative!.source.sourceQuote);
     expect(result.bundle.compiledPrompt).toContain("CURRENT USER REQUEST — HIGHEST PRIORITY");
+    expect(result.bundle.compiledPrompt).toContain("ENVIRONMENT");
     expect(result.bundle.compiledPrompt).toContain("Do not edit a copied checkout");
   });
 

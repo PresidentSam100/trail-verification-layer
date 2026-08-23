@@ -7,9 +7,11 @@ export const EnvironmentSchema = z.object({
   os: z.string().min(1).optional(),
   host: z.string().min(1).optional(),
   client: z.string().min(1).optional(),
+  path: z.string().min(1).optional(),
   workspace: z.string().min(1).optional(),
   repository: z.string().min(1).optional(),
   branch: z.string().min(1).optional(),
+  head: z.string().regex(/^[a-f0-9]{7,40}$/i).optional(),
   runtime: z.string().min(1).optional(),
   authSurface: z.string().min(1).optional(),
 });

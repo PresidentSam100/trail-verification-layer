@@ -3,7 +3,7 @@
   "allowedChangedScopes": ["apps/", "packages/", "docs/", "benchmarks/", "corpus/", ".github/", "README.md", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.base.json", "vitest.config.ts", ".trailrc.json"],
   "forbiddenPaths": [".env", ".trail/"],
   "checks": [
-    { "name": "test", "command": ["pnpm", "test"] },
+    { "name": "test", "command": ["env", "-u", "OPENAI_API_KEY", "-u", "OPENAI_BASE_URL", "pnpm", "test"] },
     { "name": "build", "command": ["pnpm", "build"] }
   ],
   "http": [

@@ -31,9 +31,11 @@ export function detectEnvironment(workspace?: string, supplied: TrailEnvironment
     os: platform(),
     host: hostname(),
     client: process.env.TRAIL_CLIENT ?? "codex",
+    path: root || cwd,
     workspace: basename(root || cwd),
     ...(remote ? { repository: repositoryName(remote) } : {}),
     ...(root ? { branch: git(root, ["branch", "--show-current"]) || "detached" } : {}),
+    ...(root ? { head: git(root, ["rev-parse", "HEAD"]) } : {}),
     runtime: `node-${process.versions.node}`,
   };
   return { ...detected, ...supplied };
@@ -86,6 +88,7 @@ function uniqueBy<T>(items: T[], key: (item: T) => string) {
 
 function renderBundle(input: {
   task: string;
+  environment: TrailEnvironment;
   directives: IntentDirective[];
   route: ContextBundle["route"];
   evidence: ContextBundle["evidence"];
@@ -99,10 +102,14 @@ function renderBundle(input: {
   const criteria = input.directives.filter((item) => item.type === "completion_criterion").map((item) => item.text);
   const route = input.route.map((step) => `${step.action} [approved trail: ${step.trailId}]`);
   const evidence = input.evidence.map((item) => `${item.description} — expected: ${item.expected}`);
+  const environment = Object.entries(input.environment).map(([key, value]) => `${key}: ${value}`).join("\n");
   const environmentNote = input.missingEnvironment.length ? `Inspect these fields before continuing: ${input.missingEnvironment.join(", ")}.` : "Environment requirements are resolved.";
   return `<TRAIL_CONTEXT>
 CURRENT USER REQUEST — HIGHEST PRIORITY
 ${input.task}
+
+ENVIRONMENT
+${environment || "No environment details detected."}
 
 CONTEXT STATUS
 ${input.status}. ${environmentNote}
@@ -194,7 +201,7 @@ export async function compileContext(db: TrailDatabase, request: ContextCompileR
     recoveryCount: options.recoveryCount ?? 0,
     createdAt: new Date().toISOString(),
   });
-  bundle.compiledPrompt = renderBundle({ task: bundle.originalPrompt, directives: bundle.directives, route: bundle.route, evidence: bundle.evidence, status: bundle.status, missingEnvironment: bundle.missingEnvironment, stopConditions: bundle.stopConditions });
+  bundle.compiledPrompt = renderBundle({ task: bundle.originalPrompt, environment: bundle.environment, directives: bundle.directives, route: bundle.route, evidence: bundle.evidence, status: bundle.status, missingEnvironment: bundle.missingEnvironment, stopConditions: bundle.stopConditions });
   const validated = ContextBundleSchema.parse(bundle);
   db.saveContextBundle(validated);
   return { bundle: validated, provider: { intentExtraction: current.providerUsed, reranked }, matches, rejected: finalRejected };

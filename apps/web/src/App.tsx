@@ -178,6 +178,9 @@ function ContextView({ health }: { health: Health | null }) {
           {!bundle && <p>TRAIL filters by the real environment first, then ranks intent and failure shape. A vague near-match is rejected.</p>}
           {bundle?.matchedTrails.map((trail) => <article key={trail.id}><b>{trail.title}</b><p>{trail.reasons.join(" · ")}</p><small>{trail.provider.toUpperCase()} · {trail.sourceRange}</small></article>)}
           {bundle && <div className={`context-status status-${bundle.status}`}><i />{bundle.status.replaceAll("_", " ")}</div>}
+          {bundle && <dl className="detected-environment">
+            {(["path", "repository", "branch", "head", "client", "runtime"] as const).map((key) => bundle.environment[key] ? <div key={key}><dt>{key}</dt><dd title={bundle.environment[key]}>{bundle.environment[key]}</dd></div> : null)}
+          </dl>}
           {bundle?.missingEnvironment.length ? <p className="missing-context">Inspect before retrying: <strong>{bundle.missingEnvironment.join(", ")}</strong></p> : null}
           {bundle?.rejectedTrails.slice(0, 2).map((trail) => <details key={trail.id}><summary>Rejected: {trail.title}</summary><p>{trail.reasons.join(" · ")}</p></details>)}
         </aside>
