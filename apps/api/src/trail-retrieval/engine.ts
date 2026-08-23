@@ -124,7 +124,6 @@ function tokens(value: string): string[] {
 function includesTerm(haystack: string, term: string): boolean {
   const normalizedTerm = normalize(term);
   if (!normalizedTerm) return false;
-  if (normalize(haystack).includes(normalizedTerm)) return true;
   const haystackTokens = new Set(tokens(haystack));
   return tokens(term).every((token) => haystackTokens.has(token));
 }
