@@ -12,6 +12,7 @@ if (process.env.NODE_ENV !== "test") {
 const openAiKey = process.env.OPENAI_API_KEY ?? "";
 const openAiBaseUrl = process.env.OPENAI_BASE_URL ?? "";
 const modalProxyCredentialComplete = !openAiBaseUrl.includes("modal.direct") || openAiKey.includes(".ws-");
+const providerLabel = process.env.TRAIL_PROVIDER_LABEL ?? (openAiBaseUrl.includes("modal.direct") ? "K3" : "OpenAI");
 
 export const config = {
   port: Number(process.env.TRAIL_API_PORT ?? 4317),
@@ -23,6 +24,7 @@ export const config = {
   openAiBaseUrl,
   agentModel: process.env.OPENAI_AGENT_MODEL ?? "gpt-5.6-terra",
   extractorModel: process.env.OPENAI_EXTRACTOR_MODEL ?? "gpt-5.6-luna",
+  providerLabel,
   reasoningEffort: (process.env.OPENAI_REASONING_EFFORT ?? "medium") as "low" | "medium" | "high",
   codexSessionsPath: resolve(homedir(), ".codex/sessions"),
   claudeSessionsPath: resolve(homedir(), ".claude/projects"),
@@ -39,6 +41,7 @@ export function preflight() {
     liveAi: missing.length === 0,
     agentModel: config.agentModel,
     extractorModel: config.extractorModel,
+    providerLabel: config.providerLabel,
     missing,
     deterministicHarness: true,
     sourceRoots: {

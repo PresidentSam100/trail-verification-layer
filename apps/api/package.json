@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch --exclude '../../packages/contracts/dist/**' src/server.ts",
     "start": "node dist/server.js",
     "trail": "tsx src/cli.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

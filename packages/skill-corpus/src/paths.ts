@@ -29,10 +29,11 @@ function assertDirectoryStat(path: string, stat: Stats): void {
  * child is created, so a junction/symlink cannot redirect mkdir outside root.
  */
 export function ensureSafeDirectory(root: string, directory: string): string {
+  const lexicalRoot = resolve(root);
   const physicalRoot = realpathSync(root);
-  const target = assertInside(physicalRoot, resolve(directory));
-  const rel = relative(physicalRoot, target);
-  let cursor = physicalRoot;
+  const target = assertInside(lexicalRoot, resolve(directory));
+  const rel = relative(lexicalRoot, target);
+  let cursor = lexicalRoot;
 
   for (const segment of rel.split(sep).filter(Boolean)) {
     cursor = resolve(cursor, segment);
@@ -46,14 +47,15 @@ export function ensureSafeDirectory(root: string, directory: string): string {
 
   const physicalTarget = realpathSync(target);
   assertInside(physicalRoot, physicalTarget);
-  return physicalTarget;
+  return target;
 }
 
 export function assertSafeDirectory(root: string, directory: string): string {
+  const lexicalRoot = resolve(root);
   const physicalRoot = realpathSync(root);
-  const target = assertInside(physicalRoot, resolve(directory));
-  const rel = relative(physicalRoot, target);
-  let cursor = physicalRoot;
+  const target = assertInside(lexicalRoot, resolve(directory));
+  const rel = relative(lexicalRoot, target);
+  let cursor = lexicalRoot;
   for (const segment of rel.split(sep).filter(Boolean)) {
     cursor = resolve(cursor, segment);
     if (!existsSync(cursor)) throw new Error(`Missing corpus directory: ${cursor}`);
@@ -61,12 +63,13 @@ export function assertSafeDirectory(root: string, directory: string): string {
   }
   const physicalTarget = realpathSync(target);
   assertInside(physicalRoot, physicalTarget);
-  return physicalTarget;
+  return target;
 }
 
 export function ensureCorpusRoot(baseProjectRoot = projectRoot): string {
-  const physicalProjectRoot = realpathSync(baseProjectRoot);
-  return ensureSafeDirectory(physicalProjectRoot, resolve(physicalProjectRoot, ".trail", "skill-corpus"));
+  const lexicalProjectRoot = resolve(baseProjectRoot);
+  realpathSync(lexicalProjectRoot);
+  return ensureSafeDirectory(lexicalProjectRoot, resolve(lexicalProjectRoot, ".trail", "skill-corpus"));
 }
 
 export function assertRegularFile(path: string, label = "corpus file"): Stats {

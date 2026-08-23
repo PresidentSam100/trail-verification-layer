@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import { RetrievalRequestSchema, TrailSchema } from "@trail/contracts";
+import { ContextCompileRequestSchema, ContextVerifyRequestSchema, RetrievalRequestSchema, TrailSchema } from "@trail/contracts";
 import { loadActiveGeneration, loadSourceManifest } from "@trail/skill-corpus";
 import { config, preflight } from "./config.js";
 import { TrailDatabase } from "./database.js";
@@ -14,6 +14,8 @@ import { HarnessService } from "./harness.js";
 import { ensureActivePolicy, evaluatePolicy, proposePolicy } from "./policy.js";
 import { indexLocalSources } from "./source-index.js";
 import { runBenchmark } from "./benchmark.js";
+import { compileContext, recoverContext } from "./context.js";
+import { verifyContext } from "./verification.js";
 
 mkdirSync(config.corpusPath, { recursive: true });
 export const db = new TrailDatabase(config.databasePath);
@@ -131,6 +133,34 @@ app.post("/api/retrieve", async (request) => {
       rerankerError: error instanceof Error ? error.message : "OpenAI reranker failed.",
     };
   }
+});
+
+app.post("/api/context/compile", async (request) => {
+  const parsed = ContextCompileRequestSchema.parse(request.body);
+  return compileContext(db, parsed);
+});
+
+app.get("/api/context/:id", async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const bundle = db.getContextBundle(id);
+  return bundle ? { bundle, observations: db.getEvidenceObservations(id) } : reply.code(404).send({ error: "Context bundle not found" });
+});
+
+app.post("/api/context/:id/recover", async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const body = (request.body ?? {}) as { failure?: string; evidenceState?: Record<string, boolean> };
+  const bundle = db.getContextBundle(id);
+  if (!bundle) return reply.code(404).send({ error: "Context bundle not found" });
+  if (!body.failure?.trim()) return reply.code(400).send({ error: "failure is required" });
+  return recoverContext(db, bundle, body.failure.trim(), body.evidenceState ?? {});
+});
+
+app.post("/api/context/:id/verify", async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const bundle = db.getContextBundle(id);
+  if (!bundle) return reply.code(404).send({ error: "Context bundle not found" });
+  const parsed = ContextVerifyRequestSchema.parse(request.body);
+  return verifyContext(db, bundle, parsed.workspace, parsed.adapters);
 });
 
 app.post("/api/runs", async (request, reply) => {
