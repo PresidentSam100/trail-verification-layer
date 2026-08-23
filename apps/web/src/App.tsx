@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ContextBundle, IngestionPreview, RetrievalPolicy, RunEvent, RunMetrics, Trail, Trigger } from "@trail/contracts";
+import type { IngestionPreview, RetrievalPolicy, RunEvent, RunMetrics, Trail } from "@trail/contracts";
 import { api, eventStream } from "./api";
 
-type Tab = "context" | "proof" | "corpus" | "ingest" | "policy";
+type Tab = "proof" | "corpus" | "ingest" | "policy";
 type Health = {
   status: string;
   corpusCount: number;
@@ -10,10 +10,43 @@ type Health = {
   liveAi: boolean;
   agentModel: string;
   extractorModel: string;
-  providerLabel: string;
   missing: string[];
   deterministicHarness: boolean;
+  sourceRoots: { codex: boolean; claude: boolean };
   sourceIndex: { total: number; providers: Array<{ provider: string; count: number; bytes: number }>; signals: Record<string, number> };
+};
+type IngestionRecord = {
+  id: string;
+  format: IngestionPreview["format"];
+  sourceName: string;
+  status: "previewed" | "drafted" | "approved";
+  trailId: string | null;
+  redactionCount: number;
+  candidateSignals: string[];
+  requiresReview: boolean;
+  createdAt: string;
+};
+type SourceCandidate = {
+  pathHash: string;
+  provider: string;
+  sourceName: string;
+  sizeBytes: number;
+  modifiedAt: string;
+  signals: string[];
+  score: number;
+};
+type SourceInventory = {
+  total: number;
+  providers: Array<{ provider: string; count: number; bytes: number }>;
+  signals: Record<string, number>;
+  shortlist: SourceCandidate[];
+  roots: { codex: boolean; claude: boolean };
+};
+type ResearchCorpus = {
+  status: "ready" | "not-indexed";
+  source: { id: string; dataset: string; expectedRows: number; compilationLicense: string; itemLicensePolicy: string; trustTier: string };
+  stats: null | { rowsSeen?: number; uniqueSkills?: number; quarantined?: number; rowsRejected?: number };
+  safety: { executable: false; promotable: false; rawBodiesReturnedByApi: false; automaticPromotion: false };
 };
 type RunRecord = { id: string; status: string; executor: string; metrics: Record<string, RunMetrics> };
 type Benchmark = {
@@ -31,10 +64,9 @@ type Benchmark = {
 };
 
 const navigation: Array<{ id: Tab; label: string }> = [
-  { id: "context", label: "Build context" },
   { id: "proof", label: "Live proof" },
   { id: "corpus", label: "Trail corpus" },
-  { id: "ingest", label: "Contribute" },
+  { id: "ingest", label: "Data intake" },
   { id: "policy", label: "RSI policy" },
 ];
 
@@ -48,19 +80,19 @@ function Mark() {
   );
 }
 
-function StatusPill({ live, provider }: { live: boolean; provider: string }) {
-  return <span className={`status-pill ${live ? "live" : "offline"}`}><i />{live ? `${provider} ready` : `${provider} unavailable`}</span>;
+function StatusPill({ live }: { live: boolean }) {
+  return <span className={`status-pill ${live ? "live" : "offline"}`}><i />{live ? "OpenAI ready" : "AI key missing"}</span>;
 }
 
 function AppShell({ tab, setTab, health, children }: { tab: Tab; setTab: (tab: Tab) => void; health: Health | null; children: React.ReactNode }) {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button className="brand" onClick={() => setTab("context")}><Mark /><span>TRAIL</span><small>Trajectory Retrieval & Intent Alignment Layer</small></button>
+        <button className="brand" aria-label="TRAIL live proof" onClick={() => setTab("proof")}><Mark /><span>TRAIL</span><small>Trajectory Retrieval & Intent Alignment Layer</small></button>
         <nav aria-label="Primary navigation">
           {navigation.map((item) => <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}>{item.label}</button>)}
         </nav>
-        <StatusPill live={Boolean(health?.liveAi)} provider={health?.providerLabel ?? "AI"} />
+        <StatusPill live={Boolean(health?.liveAi)} />
       </header>
       <main>{children}</main>
     </div>
@@ -105,102 +137,6 @@ function AgentLane({ side, events, metrics, running }: { side: "baseline" | "gui
   );
 }
 
-type CompileResult = {
-  bundle: ContextBundle;
-  provider: { intentExtraction: boolean; reranked: boolean };
-};
-
-function DirectiveList({ bundle, type, empty }: { bundle: ContextBundle; type: "required_action" | "completion_criterion" | "negative_constraint"; empty: string }) {
-  const items = bundle.directives.filter((item) => item.type === type);
-  if (!items.length) return <p className="empty-copy">{empty}</p>;
-  return <ol>{items.map((item) => <li key={item.id}><span>{type === "negative_constraint" ? item.source.sourceQuote : item.text}</span><small>{item.source.kind === "current_request" ? "CURRENT REQUEST" : `TRAIL · ${item.source.trailId}`}</small></li>)}</ol>;
-}
-
-function ContextView({ health }: { health: Health | null }) {
-  const [task, setTask] = useState("Fix the production route in the user-visible service checkout. Do not edit a copied checkout. Prove the browser-visible result before release.");
-  const [workspacePath, setWorkspacePath] = useState("");
-  const [environment, setEnvironment] = useState({ client: "codex", workspace: "service-live", branch: "", host: "" });
-  const [trigger, setTrigger] = useState<Trigger>("start");
-  const [failure, setFailure] = useState("");
-  const [result, setResult] = useState<CompileResult | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
-
-  const compile = async () => {
-    setBusy(true); setError(""); setCopied(false);
-    try {
-      const explicitEnvironment = Object.fromEntries(Object.entries(environment).filter(([, value]) => value.trim()));
-      const body = { task, trigger, environment: explicitEnvironment, evidenceState: {}, ...(workspacePath.trim() ? { workspace: workspacePath.trim() } : {}), ...(trigger === "failure" && failure.trim() ? { failure: failure.trim() } : {}) };
-      setResult(await api<CompileResult>("/api/context/compile", { method: "POST", body: JSON.stringify(body) }));
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Context compilation failed"); }
-    finally { setBusy(false); }
-  };
-
-  const bundle = result?.bundle;
-  const copyPrompt = async () => {
-    if (!bundle) return;
-    await navigator.clipboard.writeText(bundle.compiledPrompt);
-    setCopied(true);
-  };
-
-  return (
-    <div className="view context-view">
-      <section className="context-hero">
-        <div>
-          <p className="eyebrow">EXTERNAL HUMAN CONTEXT FOR CODING AGENTS</p>
-          <h1>Turn a normal request into an<br /><em>execution brief the agent can follow.</em></h1>
-          <p>TRAIL retrieves reviewed lessons from prior Codex and Claude runs, preserves what the human meant, makes negative constraints explicit, and defines the proof required before completion.</p>
-        </div>
-        <div className="context-flow" aria-label="TRAIL context flow"><span>Your request</span><b>→</b><span>Human lessons</span><b>→</b><span>Agent brief</span><b>→</b><span>Verification</span></div>
-      </section>
-
-      <section className="context-workbench">
-        <div className="prompt-builder panel">
-          <div className="section-heading"><div><span>01 · CURRENT REQUEST</span><h2>What should the agent do?</h2></div><small>Preserved verbatim · highest priority</small></div>
-          <textarea aria-label="Task prompt" value={task} onChange={(event) => setTask(event.target.value)} />
-          <div className="trigger-row" aria-label="Context trigger">
-            {(["start", "failure", "release"] as Trigger[]).map((item) => <button key={item} className={trigger === item ? "active" : ""} onClick={() => setTrigger(item)}>{item === "start" ? "Task start" : item === "failure" ? "After failure" : "Pre-release"}</button>)}
-          </div>
-          {trigger === "failure" && <input aria-label="Observed failure" value={failure} onChange={(event) => setFailure(event.target.value)} placeholder="Paste the observed error or failed evidence…" />}
-          <div className="environment-fields">
-            <label><span>Local path</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} placeholder="Auto-detect API workspace" /></label>
-            <label><span>Client</span><input value={environment.client} onChange={(event) => setEnvironment({ ...environment, client: event.target.value })} /></label>
-            <label><span>Workspace identity</span><input value={environment.workspace} onChange={(event) => setEnvironment({ ...environment, workspace: event.target.value })} /></label>
-            <label><span>Branch</span><input value={environment.branch} onChange={(event) => setEnvironment({ ...environment, branch: event.target.value })} placeholder="Auto-detect" /></label>
-          </div>
-          <button className="primary build-context" disabled={busy || task.trim().length < 3} onClick={() => void compile()}>{busy ? `Building with ${health?.extractorModel ?? "provider"}…` : "Build agent context"}<span>→</span></button>
-          {error && <p className="error-copy">{error}</p>}
-        </div>
-
-        <aside className="source-panel panel">
-          <span>02 · RETRIEVAL</span><h2>{bundle ? bundle.matchedTrails.length ? `${bundle.matchedTrails.length} human trail${bundle.matchedTrails.length > 1 ? "s" : ""} matched` : "No trail forced" : "Waiting for a request"}</h2>
-          {!bundle && <p>TRAIL filters by the real environment first, then ranks intent and failure shape. A vague near-match is rejected.</p>}
-          {bundle?.matchedTrails.map((trail) => <article key={trail.id}><b>{trail.title}</b><p>{trail.reasons.join(" · ")}</p><small>{trail.provider.toUpperCase()} · {trail.sourceRange}</small></article>)}
-          {bundle && <div className={`context-status status-${bundle.status}`}><i />{bundle.status.replaceAll("_", " ")}</div>}
-          {bundle && <dl className="detected-environment">
-            {(["path", "repository", "branch", "head", "client", "runtime"] as const).map((key) => bundle.environment[key] ? <div key={key}><dt>{key}</dt><dd title={bundle.environment[key]}>{bundle.environment[key]}</dd></div> : null)}
-          </dl>}
-          {bundle?.missingEnvironment.length ? <p className="missing-context">Inspect before retrying: <strong>{bundle.missingEnvironment.join(", ")}</strong></p> : null}
-          {bundle?.rejectedTrails.slice(0, 2).map((trail) => <details key={trail.id}><summary>Rejected: {trail.title}</summary><p>{trail.reasons.join(" · ")}</p></details>)}
-        </aside>
-      </section>
-
-      {bundle && <section className="brief-section">
-        <div className="brief-heading"><div><p className="eyebrow">03 · SOURCE-BACKED EXECUTION BRIEF</p><h2>The agent now has a trail to return to.</h2></div><div><code>{bundle.id.slice(0, 8)}</code><button className="secondary" onClick={() => void copyPrompt()}>{copied ? "Copied" : "Copy agent prompt"}</button></div></div>
-        <div className="brief-grid">
-          <article className="brief-card do"><span>DO</span><DirectiveList bundle={bundle} type="required_action" empty="Follow the current request exactly." /><DirectiveList bundle={bundle} type="completion_criterion" empty="" /></article>
-          <article className="brief-card dont"><span>DO NOT</span><DirectiveList bundle={bundle} type="negative_constraint" empty="Do not expand scope or invent proof." /></article>
-          <article className="brief-card route"><span>ROUTE</span>{bundle.route.length ? <ol>{bundle.route.map((step) => <li key={`${step.trailId}-${step.id}`}><span>{step.action}</span><small>{step.tool.toUpperCase()} · failure: {step.onFailure}</small></li>)}</ol> : <p className="empty-copy">No historical route cleared the threshold. Continue with the bounded baseline route.</p>}</article>
-          <article className="brief-card evidence"><span>EVIDENCE REQUIRED</span>{bundle.evidence.length ? <ol>{bundle.evidence.map((item) => <li key={item.id}><span>{item.description}</span><small>{item.kind.toUpperCase()} · expected: {item.expected}</small></li>)}</ol> : <p className="empty-copy">Inspect the environment, changed scope, and requested checks before completion.</p>}</article>
-        </div>
-        <div className="compiled-prompt panel"><div><span>COMPILED CONTEXT</span><small>Deterministic template · agent-readable</small></div><pre>{bundle.compiledPrompt}</pre></div>
-        <div className="mcp-callout"><div><span>USE IT FROM CODEX OR CLAUDE</span><strong>Call <code>trail_build_context</code> at task start, <code>trail_recover</code> after failure, and <code>trail_verify</code> before release.</strong></div><code>node apps/mcp/dist/index.js</code></div>
-      </section>}
-    </div>
-  );
-}
-
 function ProofView({ health }: { health: Health | null }) {
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [run, setRun] = useState<RunRecord | null>(null);
@@ -240,7 +176,7 @@ function ProofView({ health }: { health: Health | null }) {
         </div>
         <div className="hero-actions">
           <button className="primary" disabled={running} onClick={() => void start("deterministic-fixture")}>{running ? "Proof running…" : "Run deterministic proof"}<span>→</span></button>
-          <button className="secondary" disabled={running || !health?.liveAi} onClick={() => void start("openai-responses")}>Run live {health?.providerLabel ?? "AI"} pair</button>
+          <button className="secondary" disabled={running || !health?.liveAi} onClick={() => void start("openai-responses")}>Run live OpenAI pair</button>
           {!health?.liveAi && <p>Live run unavailable: <code>{health?.missing.join(", ") || "provider preflight"}</code>. Nothing is simulated as AI.</p>}
           {error && <p className="error-copy">{error}</p>}
         </div>
@@ -309,71 +245,203 @@ function CorpusView({ trails }: { trails: Trail[] }) {
   );
 }
 
+function bytes(value: number) {
+  if (!value) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  return `${(value / 1024 ** index).toFixed(index > 1 ? 1 : 0)} ${units[index]}`;
+}
+
 function IngestView({ health, onApproved }: { health: Health | null; onApproved: (trail: Trail) => void }) {
   const [preview, setPreview] = useState<IngestionPreview | null>(null);
   const [draft, setDraft] = useState<Trail | null>(null);
-  const [candidates, setCandidates] = useState<Array<{ pathHash: string; provider: string; sourceName: string; signals: string[]; score: number }>>([]);
+  const [json, setJson] = useState("");
+  const [records, setRecords] = useState<IngestionRecord[]>([]);
+  const [sources, setSources] = useState<SourceInventory | null>(null);
+  const [research, setResearch] = useState<ResearchCorpus | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [message, setMessage] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
 
-  useEffect(() => { void api<{ candidates: typeof candidates }>("/api/sources/candidates").then((result) => setCandidates(result.candidates)).catch(() => undefined); }, []);
-
-  const choose = async (file: File) => {
-    setBusy(true); setMessage(""); setDraft(null);
-    try {
-      const text = await file.text();
-      const result = await api<IngestionPreview>("/api/ingestions/preview", { method: "POST", body: JSON.stringify({ sourceName: file.name, text }) });
-      setPreview(result);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Preview failed"); } finally { setBusy(false); }
+  const reloadIntake = async () => {
+    const [ingestionResult, sourceResult, researchResult] = await Promise.all([
+      api<{ ingestions: IngestionRecord[] }>("/api/ingestions"),
+      api<SourceInventory>("/api/sources"),
+      api<ResearchCorpus>("/api/research-corpus"),
+    ]);
+    setRecords(ingestionResult.ingestions);
+    setSources(sourceResult);
+    setResearch(researchResult);
   };
+
+  useEffect(() => { void reloadIntake().catch(() => undefined); }, []);
+
+  const select = async (id: string) => {
+    setBusy(true); setMessage(null); setDraft(null); setJson("");
+    try { setPreview(await api<IngestionPreview>(`/api/ingestions/${id}`)); }
+    catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Could not load that ingestion." }); }
+    finally { setBusy(false); }
+  };
+
+  const ingestFiles = async (files: File[]) => {
+    if (!files.length) return;
+    setBusy(true); setMessage(null); setDraft(null); setJson("");
+    try {
+      const bounded = files.slice(0, 8);
+      const tooLarge = bounded.find((file) => file.size > 12 * 1024 * 1024);
+      if (tooLarge) throw new Error(`${tooLarge.name} is larger than the 12 MB intake limit.`);
+      const previews: IngestionPreview[] = [];
+      for (const file of bounded) {
+        const text = await file.text();
+        previews.push(await api<IngestionPreview>("/api/ingestions/preview", {
+          method: "POST",
+          body: JSON.stringify({ sourceName: file.name, text }),
+        }));
+      }
+      setPreview(previews[0] ?? null);
+      setMessage({ tone: "success", text: `${previews.length} transcript${previews.length === 1 ? "" : "s"} redacted and added to review.` });
+      await reloadIntake();
+    } catch (error) {
+      setMessage({ tone: "error", text: error instanceof Error ? error.message : "Intake failed." });
+    } finally { setBusy(false); }
+  };
+
+  const loadSample = async () => {
+    setBusy(true); setMessage(null); setDraft(null); setJson("");
+    try {
+      const result = await api<IngestionPreview>("/api/ingestions/sample", { method: "POST", body: "{}" });
+      setPreview(result);
+      setMessage({ tone: "info", text: "Sample Codex run loaded. Review the exact redacted payload below." });
+      await reloadIntake();
+    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Sample intake failed." }); }
+    finally { setBusy(false); }
+  };
+
+  const scanSources = async () => {
+    setScanning(true); setMessage(null);
+    try {
+      const result = await api<SourceInventory & { indexed: number }>("/api/sources/index", { method: "POST", body: "{}" });
+      setSources(result);
+      setMessage({ tone: "success", text: `Indexed metadata and route signals for ${result.indexed} local runs. Raw transcripts were not copied.` });
+    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Source scan failed." }); }
+    finally { setScanning(false); }
+  };
+
   const extract = async () => {
     if (!preview) return;
-    setBusy(true); setMessage("");
+    setBusy(true); setMessage(null);
     try {
       const result = await api<{ trail: Trail }>(`/api/ingestions/${preview.id}/extract`, { method: "POST", body: "{}" });
-      setDraft(result.trail);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Extraction failed"); } finally { setBusy(false); }
+      setDraft(result.trail); setJson(JSON.stringify(result.trail, null, 2));
+      setMessage({ tone: "info", text: "Draft extracted. Nothing is trusted until you approve the contract." });
+      await reloadIntake();
+    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Extraction failed." }); }
+    finally { setBusy(false); }
   };
+
+  const startManualDraft = async () => {
+    if (!preview) return;
+    setBusy(true); setMessage(null);
+    try {
+      const result = await api<{ trail: Trail }>(`/api/ingestions/${preview.id}/draft-template`, { method: "POST", body: "{}" });
+      setDraft(result.trail); setJson(JSON.stringify(result.trail, null, 2));
+      setMessage({ tone: "info", text: "Manual template created. Replace every placeholder with evidence from the redacted payload before approval." });
+      await reloadIntake();
+    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Could not create a manual draft." }); }
+    finally { setBusy(false); }
+  };
+
   const approve = async () => {
     if (!draft) return;
-    setBusy(true); setMessage("");
+    setBusy(true); setMessage(null);
     try {
-      const result = await api<{ trail: Trail; path: string }>(`/api/trails/${draft.id}/approve`, { method: "POST", body: JSON.stringify(draft) });
-      onApproved(result.trail); setMessage(`Approved and exported as ${result.trail.id}.trail.json`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Approval failed"); } finally { setBusy(false); }
+      const parsed = JSON.parse(json) as Trail;
+      const result = await api<{ trail: Trail; path: string }>(`/api/trails/${draft.id}/approve`, { method: "POST", body: JSON.stringify(parsed) });
+      onApproved(result.trail);
+      setMessage({ tone: "success", text: `Approved ${result.trail.id}. It is now eligible for retrieval.` });
+      await reloadIntake();
+    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Approval failed." }); }
+    finally { setBusy(false); }
   };
+
+  const providers = new Map((sources?.providers ?? health?.sourceIndex.providers ?? []).map((item) => [item.provider, item]));
+  const sourceTotal = sources?.total ?? health?.sourceIndex.total ?? 0;
 
   return (
     <div className="view content-view ingest-view">
-      <div className="page-heading"><div><p className="eyebrow">HUMAN REVIEW IS THE AUTHORITY BOUNDARY</p><h1>Turn a run into external context</h1><p>TRAIL has indexed {health?.sourceIndex.total ?? 0} local Codex and Claude sessions without copying them. Review a redacted episode, correct the lesson, then approve it for retrieval.</p></div></div>
-      <section className="review-queue panel">
-        <div className="section-heading"><div><span>HIGH-SIGNAL LOCAL EPISODES</span><h2>Review queue</h2></div><small>Metadata and signals only · raw runs stay in place</small></div>
-        <div>{candidates.slice(0, 6).map((candidate) => <article key={candidate.pathHash}><div><b>{candidate.sourceName}</b><small>{candidate.provider.toUpperCase()}</small></div><span>{candidate.signals.join(" · ")}</span><strong>{candidate.score}</strong></article>)}</div>
+      <div className="page-heading intake-heading">
+        <div><p className="eyebrow">INGESTION CONTROL PLANE</p><h1>Make experience retrievable.</h1><p>Bring in real Codex and Claude runs, remove sensitive data locally, extract a strict route contract, and promote it only after human review.</p></div>
+        <div className="heading-stats"><strong>{sourceTotal}</strong><span>runs indexed</span><strong>{records.length}</strong><span>review items</span></div>
+      </div>
+
+      <section className="pipeline-ribbon" aria-label="Ingestion lifecycle">
+        <div className="complete"><span>01</span><b>Discover</b><small>Metadata + signals</small></div>
+        <div className={preview ? "complete" : "active"}><span>02</span><b>Redact</b><small>Local privacy pass</small></div>
+        <div className={draft ? "complete" : preview ? "active" : ""}><span>03</span><b>Structure</b><small>Draft route contract</small></div>
+        <div className={records.some((record) => record.status === "approved") ? "complete" : draft ? "active" : ""}><span>04</span><b>Approve</b><small>Retrieval eligible</small></div>
       </section>
-      <div className="ingest-grid">
-        <section className="panel upload-panel">
-          <span className="step-number">01</span><h2>Choose a transcript</h2><p>Native adapters understand Codex response items and Claude message/tool-result records.</p>
-          <label className="file-picker"><input type="file" accept=".jsonl,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void choose(file); }} /><span>{busy ? "Reading locally…" : "Select .jsonl file"}</span></label>
-          {preview && <div className="preview-meta"><b>{preview.format.toUpperCase()}</b><span>{preview.redactionCount} redactions</span><span>{preview.candidateSignals.length} route signals</span></div>}
+
+      <div className="source-grid">
+        {["codex", "claude"].map((provider) => {
+          const inventory = providers.get(provider);
+          const detected = sources?.roots[provider as keyof SourceInventory["roots"]] ?? health?.sourceRoots?.[provider as keyof Health["sourceRoots"]];
+          return <article className="source-card panel" key={provider}>
+            <div className="source-card-top"><span className={`source-icon ${provider}`}>{provider === "codex" ? "C" : "A"}</span><span className={`connector-state ${detected ? "ready" : "missing"}`}><i />{detected ? "Detected" : "Not found"}</span></div>
+            <h2>{provider === "codex" ? "Codex sessions" : "Claude projects"}</h2>
+            <p>Index hashes, timestamps, size, and recovery signals. Transcript bodies stay at their original path.</p>
+            <footer><strong>{inventory?.count ?? 0}</strong><span>runs</span><strong>{bytes(inventory?.bytes ?? 0)}</strong><span>observed</span></footer>
+          </article>;
+        })}
+        <article className="source-card source-control panel">
+          <div><span className="step-number">SOURCE DISCOVERY</span><h2>Refresh the local index</h2><p>Use the shortlist to find runs with corrections, tool failures, environment changes, and release evidence.</p></div>
+          <button className="secondary" disabled={scanning} onClick={() => void scanSources()}>{scanning ? "Scanning…" : "Scan this device"}<span>↻</span></button>
+        </article>
+      </div>
+
+      {message && <div className={`intake-message ${message.tone}`} role="status"><i />{message.text}</div>}
+
+      <div className="intake-workspace">
+        <section className="panel intake-queue">
+          <div className="section-heading"><div><span className="step-number">01 · INTAKE</span><h2>Add trajectory data</h2></div><button className="text-button" disabled={busy} onClick={() => void loadSample()}>Try sample</button></div>
+          <label className={`file-picker ${busy ? "busy" : ""}`}>
+            <input type="file" multiple accept=".jsonl,.json,application/json" onChange={(event) => { void ingestFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }} />
+            <span className="upload-glyph">＋</span><b>{busy ? "Processing locally…" : "Drop or choose transcript files"}</b><small>Codex or Claude JSONL · up to 8 files · 12 MB each</small>
+          </label>
+          <div className="queue-heading"><span>Review queue</span><b>{records.length}</b></div>
+          <div className="queue-list">
+            {records.length === 0 && <p className="empty-queue">No intake records yet. Load the sample to test redaction without exposing private data.</p>}
+            {records.slice(0, 8).map((record) => <button key={record.id} className={`queue-row ${preview?.id === record.id ? "selected" : ""}`} onClick={() => void select(record.id)}>
+              <span className={`format-badge ${record.format}`}>{record.format.slice(0, 1).toUpperCase()}</span>
+              <span className="queue-copy"><b>{record.sourceName}</b><small>{record.candidateSignals.length ? record.candidateSignals.join(" · ") : "No strong route signal"}</small></span>
+              <span className={`review-status ${record.status}`}>{record.status}</span>
+            </button>)}
+          </div>
         </section>
+
         <section className="panel redaction-panel">
-          <span className="step-number">02</span><h2>Review redactions</h2>
-          <pre>{preview?.redactedText.slice(0, 7_000) || "The redacted excerpt appears here. Secrets, personal paths, emails, phone numbers, and repository URLs are removed before extraction."}</pre>
+          <div className="section-heading"><div><span className="step-number">02 · PRIVACY REVIEW</span><h2>{preview ? preview.sourceName : "Redacted payload"}</h2></div>{preview && <span className={`format-label ${preview.format}`}>{preview.format}</span>}</div>
+          {preview ? <>
+            <div className="preview-meta"><b>{preview.redactionCount} REDACTIONS</b><span>{preview.candidateSignals.length} route signals</span><span>{preview.requiresReview ? "review required" : "clean pass"}</span></div>
+            <pre>{preview.redactedText.slice(0, 12_000)}</pre>
+          </> : <div className="redaction-empty"><span>⌁</span><h3>Select an intake record</h3><p>The exact text eligible for extraction will appear here. Secrets, personal paths, contact details, and repository URLs are removed first.</p></div>}
         </section>
       </div>
+
       <section className="panel approval-panel">
-        <div><span className="step-number">03</span><h2>Extract, edit, approve</h2><p>Extraction uses <code>{health?.extractorModel ?? "gpt-5.6-luna"}</code> with <code>store: false</code>. Every field remains a private draft until a human approves it.</p></div>
-        <button className="secondary" disabled={!preview || !health?.liveAi || busy} onClick={() => void extract()}>{health?.liveAi ? "Extract draft trail" : `${health?.providerLabel ?? "AI"} configuration required`}</button>
-        {draft && <div className="trail-editor">
-          <label><span>Lesson title</span><input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
-          <label><span>Human intent</span><textarea value={draft.intent} onChange={(event) => setDraft({ ...draft, intent: event.target.value })} /></label>
-          <label><span>Do — one per line</span><textarea value={draft.preconditions.join("\n")} onChange={(event) => setDraft({ ...draft, preconditions: event.target.value.split("\n").filter(Boolean) })} /></label>
-          <label><span>Do not — literal constraints</span><textarea value={draft.negativeConstraints.join("\n")} onChange={(event) => setDraft({ ...draft, negativeConstraints: event.target.value.split("\n").filter(Boolean) })} /></label>
-          <label><span>Verified outcome</span><textarea value={draft.outcome} onChange={(event) => setDraft({ ...draft, outcome: event.target.value })} /></label>
-          <div className="route-editor"><span>ORDERED ROUTE</span>{draft.steps.map((step, index) => <label key={step.id}><small>{String(index + 1).padStart(2, "0")} · {step.tool.toUpperCase()}</small><input value={step.action} onChange={(event) => setDraft({ ...draft, steps: draft.steps.map((item) => item.id === step.id ? { ...item, action: event.target.value } : item) })} /></label>)}</div>
-        </div>}
-        {draft && <button className="primary compact" disabled={busy} onClick={() => void approve()}>Approve public trail <span>→</span></button>}
-        {message && <p className={message.startsWith("Approved") ? "success-copy" : "error-copy"}>{message}</p>}
+        <div className="approval-intro"><span className="step-number">03–04 · STRUCTURE + APPROVE</span><h2>Promote a reviewed contract</h2><p>Extraction uses <code>{health?.extractorModel ?? "gpt-5.6-luna"}</code> with <code>store: false</code>. A draft cannot enter retrieval until you validate and approve its evidence contract.</p></div>
+        <div className="approval-actions">
+          <span className={`ai-state ${health?.liveAi ? "ready" : "missing"}`}><i />{health?.liveAi ? "Extractor connected" : "Extractor needs OPENAI_API_KEY"}</span>
+          <button className="text-button manual-draft" disabled={!preview || busy} onClick={() => void startManualDraft()}>Start manual draft</button>
+          <button className="secondary" disabled={!preview || !health?.liveAi || busy} onClick={() => void extract()}>{busy ? "Working…" : "Extract draft trail"}<span>→</span></button>
+        </div>
+        {draft && <div className="contract-editor"><div><span>DRAFT CONTRACT</span><b>{draft.id}</b></div><textarea aria-label="Trail JSON" value={json} onChange={(event) => setJson(event.target.value)} /></div>}
+        {draft && <div className="approval-submit"><p>Approval makes this redacted contract available to the runtime retriever. It does not publish raw transcript content.</p><button className="primary compact" disabled={busy} onClick={() => void approve()}>Approve into corpus <span>✓</span></button></div>}
+      </section>
+
+      <section className="trust-boundary panel">
+        <div><span>RESEARCH DATA · {research?.status === "ready" ? "INDEXED" : "PINNED"}</span><h2>{research?.status === "ready" ? `${(research.stats?.uniqueSkills ?? research.source.expectedRows).toLocaleString()} unique skills, quarantined.` : `${(research?.source.expectedRows ?? 138_133).toLocaleString()} records pinned for import.`}</h2></div>
+        <p>{research?.source.dataset ?? "External skill metadata"} can improve discovery, but it is never executable, trusted, or automatically promoted. Every route that reaches the runtime corpus still crosses the same redaction and human-review boundary.</p>
+        <div className="trust-tags"><span>metadata only</span><span>license unresolved</span><span>risk scanned</span><span>no auto-install</span></div>
       </section>
     </div>
   );
@@ -414,7 +482,7 @@ function WeightBars({ weights }: { weights: RetrievalPolicy["weights"] | undefin
 }
 
 export function App() {
-  const [tab, setTab] = useState<Tab>("context");
+  const [tab, setTab] = useState<Tab>("proof");
   const [health, setHealth] = useState<Health | null>(null);
   const [trails, setTrails] = useState<Trail[]>([]);
   const [policies, setPolicies] = useState<RetrievalPolicy[]>([]);
@@ -429,7 +497,6 @@ export function App() {
 
   return (
     <AppShell tab={tab} setTab={setTab} health={health}>
-      {tab === "context" && <ContextView health={health} />}
       {tab === "proof" && <ProofView health={health} />}
       {tab === "corpus" && <CorpusView trails={trails} />}
       {tab === "ingest" && <IngestView health={health} onApproved={(trail) => setTrails((current) => [trail, ...current.filter((item) => item.id !== trail.id)])} />}

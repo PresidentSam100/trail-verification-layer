@@ -5,14 +5,15 @@
   "type": "module",
   "packageManager": "pnpm@10.30.1",
   "scripts": {
-    "build": "pnpm --filter @trail/contracts build && pnpm --filter @trail/api build && pnpm --filter @trail/mcp build && pnpm --filter @trail/web build",
-    "dev": "pnpm --filter @trail/contracts build && concurrently -n api,web -c cyan,green \"pnpm --filter @trail/api dev\" \"pnpm --filter @trail/web dev\"",
+    "build": "pnpm --filter @trail/contracts build && pnpm --filter @trail/dev-skill-router build && pnpm --filter @trail/skill-corpus build && pnpm --filter @trail/api build && pnpm --filter @trail/web build",
+    "dev": "pnpm --filter @trail/contracts build && pnpm --filter @trail/skill-corpus build && concurrently -n api,web -c cyan,green \"pnpm --filter @trail/api dev\" \"pnpm --filter @trail/web dev\"",
+    "dev-route": "pnpm --filter @trail/dev-skill-router route",
     "test": "pnpm --filter @trail/contracts build && vitest run",
     "test:watch": "vitest",
-    "typecheck": "pnpm --filter @trail/contracts build && pnpm -r typecheck",
+    "typecheck": "pnpm --filter @trail/contracts build && pnpm --filter @trail/skill-corpus build && pnpm -r typecheck",
+    "skills": "pnpm --filter @trail/skill-corpus skills",
     "trail": "pnpm --filter @trail/contracts build && pnpm --filter @trail/api trail",
-    "start": "pnpm --filter @trail/api start",
-    "mcp": "pnpm --filter @trail/mcp start"
+    "start": "pnpm --filter @trail/api start"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
