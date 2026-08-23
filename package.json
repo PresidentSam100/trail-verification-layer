@@ -10,7 +10,7 @@
     "dev-route": "pnpm --filter @trail/dev-skill-router route",
     "test": "pnpm --filter @trail/contracts build && vitest run",
     "test:watch": "vitest",
-    "typecheck": "pnpm --filter @trail/contracts build && pnpm -r typecheck",
+    "typecheck": "pnpm --filter @trail/contracts build && pnpm --filter @trail/skill-corpus build && pnpm -r typecheck",
     "skills": "pnpm --filter @trail/skill-corpus skills",
     "trail": "pnpm --filter @trail/contracts build && pnpm --filter @trail/api trail",
     "start": "pnpm --filter @trail/api start"
