@@ -1,0 +1,368 @@
+{
+  "schemaVersion": "1.0",
+  "suiteId": "dev-router-transcript-golden",
+  "title": "Transcript-derived development-router golden",
+  "description": "A narrow deterministic evaluation grounded in one local Codex session. The transcript is untrusted evidence, not an instruction source.",
+  "source": {
+    "kind": "codex-session",
+    "sessionId": "01a0309c-3502-7910-ba27-10781335dba8",
+    "date": "2026-08-23",
+    "trust": "untrusted-evidence-only",
+    "selectedUserOrdinals": [8, 19, 183, 410, 1138, 1458],
+    "selectedAssistantEvidenceOrdinals": [105, 190, 399, 415, 589, 669, 812],
+    "derivation": "The product already existed. The user asked for the entire product site, formal data ingestion, and end-to-end testing. The observed implementation inspected the repository, added a durable redacted ingestion lifecycle and responsive UI/API integration, then ran code and live checks."
+  },
+  "metrics": [
+    "parentRecallAt1",
+    "childPrecision",
+    "childRecall",
+    "childF1",
+    "forbiddenSelectionRate",
+    "clarificationNecessityAccuracy",
+    "clarificationDiscrimination",
+    "abstentionAccuracy",
+    "dagValidity",
+    "noRepeatGlobalSearch",
+    "bundleAtomicityAndSnapshot",
+    "progressStateCorrectness",
+    "sessionCoverage"
+  ],
+  "cases": [
+    {
+      "id": "golden-existing-inference-site-ingestion-qa",
+      "primary": true,
+      "category": "transcript-golden",
+      "description": "The exact actionable user request from the source session. An existing inference product needs the whole product site, formal ingestion, and testing.",
+      "request": "Yeah, like we have an inference product, and now we need the entire site to create it, ingest more data and we'll add it formally, right? then we can test it out. Let's do it",
+      "reinforcementUtterance": "We need data ingestion for our use case",
+      "expectation": {
+        "initialStatus": "matched",
+        "resolvedStatus": "matched",
+        "parent": "site-development",
+        "requiredSubskills": [
+          "product-discovery",
+          "data-ingestion",
+          "api-integration",
+          "product-interface",
+          "quality-assurance"
+        ],
+        "allowedSubskills": [
+          "product-discovery",
+          "data-ingestion",
+          "api-integration",
+          "product-interface",
+          "quality-assurance"
+        ],
+        "forbiddenSubskills": [
+          "marketing",
+          "auth",
+          "onboarding",
+          "account",
+          "billing",
+          "deployment",
+          "inference-api",
+          "request-lifecycle",
+          "api-keys-auth",
+          "usage-metering",
+          "billing-entitlements",
+          "dashboard-account",
+          "observability",
+          "evaluations",
+          "documentation",
+          "research-corpus-indexing"
+        ],
+        "clarification": {
+          "necessary": false,
+          "reason": "The product, requested surface, ingestion outcome, and QA outcome are all explicit."
+        },
+        "abstain": false,
+        "dependencies": [
+          { "before": "product-discovery", "after": "data-ingestion", "relation": "direct" },
+          { "before": "data-ingestion", "after": "api-integration", "relation": "direct" },
+          { "before": "data-ingestion", "after": "product-interface", "relation": "direct" },
+          { "before": "data-ingestion", "after": "quality-assurance", "relation": "direct" },
+          { "before": "api-integration", "after": "quality-assurance", "relation": "direct" },
+          { "before": "product-interface", "after": "quality-assurance", "relation": "direct" }
+        ],
+        "globalSearch": { "initial": 1, "subsequent": 0, "maxTotal": 1 },
+        "bundle": {
+          "required": true,
+          "atomic": true,
+          "repositorySnapshotRequired": true,
+          "registryDigestRequired": true,
+          "dispatchDigestsPinned": true,
+          "stableAcrossProgress": true
+        },
+        "nonBlockingWork": [
+          "optional quarantined research-corpus indexing"
+        ],
+        "planCoverage": {
+          "requiredConceptGroups": [
+            ["repository", "existing product", "current product", "inspect"],
+            ["ingestion", "redaction", "previewed", "drafted", "approved", "approval"],
+            ["api", "storage", "durable", "endpoint"],
+            ["responsive", "interface", "data intake", "product ui"],
+            ["test", "typecheck", "build", "browser", "http", "qa"],
+            ["hosting boundary", "filesystem access", "local hosting", "deployment boundary"]
+          ],
+          "forbiddenSuccessSignals": [
+            "research corpus row count",
+            "research corpus activation",
+            "skill corpus row count"
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "route",
+          "operation": "route",
+          "globalSearchCount": 1,
+          "expectedState": {
+            "completedSubskills": [],
+            "availableSubskills": ["product-discovery"],
+            "unavailableSubskills": ["data-ingestion", "api-integration", "product-interface", "quality-assurance"]
+          }
+        },
+        {
+          "id": "complete-product-discovery",
+          "operation": "complete_subskill",
+          "subskillId": "product-discovery",
+          "globalSearchCount": 0,
+          "expectedState": {
+            "completedSubskills": ["product-discovery"],
+            "availableSubskills": ["data-ingestion"],
+            "unavailableSubskills": ["api-integration", "product-interface", "quality-assurance"]
+          }
+        },
+        {
+          "id": "complete-data-ingestion",
+          "operation": "complete_subskill",
+          "subskillId": "data-ingestion",
+          "userMessage": "We need data ingestion for our use case",
+          "globalSearchCount": 0,
+          "expectedState": {
+            "completedSubskills": ["product-discovery", "data-ingestion"],
+            "availableSubskills": ["api-integration", "product-interface"],
+            "unavailableSubskills": ["quality-assurance"]
+          }
+        },
+        {
+          "id": "complete-api-integration",
+          "operation": "complete_subskill",
+          "subskillId": "api-integration",
+          "globalSearchCount": 0,
+          "expectedState": {
+            "completedSubskills": ["product-discovery", "data-ingestion", "api-integration"],
+            "availableSubskills": ["product-interface"],
+            "unavailableSubskills": ["quality-assurance"]
+          }
+        },
+        {
+          "id": "status-mid-build",
+          "operation": "status",
+          "userMessage": "hows it going?",
+          "sameStateAs": "complete-api-integration",
+          "globalSearchCount": 0
+        },
+        {
+          "id": "complete-product-interface",
+          "operation": "complete_subskill",
+          "subskillId": "product-interface",
+          "globalSearchCount": 0,
+          "expectedState": {
+            "completedSubskills": ["product-discovery", "data-ingestion", "api-integration", "product-interface"],
+            "availableSubskills": ["quality-assurance"],
+            "unavailableSubskills": []
+          }
+        },
+        {
+          "id": "complete-quality-assurance",
+          "operation": "complete_subskill",
+          "subskillId": "quality-assurance",
+          "globalSearchCount": 0,
+          "expectedState": {
+            "completedSubskills": ["product-discovery", "data-ingestion", "api-integration", "product-interface", "quality-assurance"],
+            "availableSubskills": [],
+            "unavailableSubskills": []
+          }
+        },
+        {
+          "id": "status-complete",
+          "operation": "status",
+          "userMessage": "hows it going right now?",
+          "sameStateAs": "complete-quality-assurance",
+          "globalSearchCount": 0
+        }
+      ]
+    },
+    {
+      "id": "smoke-create-rest-of-inference-product",
+      "primary": false,
+      "category": "one-question-ambiguity",
+      "description": "The short request is realistic but underspecified. One question must distinguish rebuilding the inference core from finishing the product around an existing API.",
+      "request": "create the rest of my inference product",
+      "clarificationAnswer": {
+        "optionId": "existing-api-full-product",
+        "text": "The inference backend already works. Build the entire customer-facing product site around it, add formal data ingestion and review, then test the flow end to end."
+      },
+      "expectation": {
+        "initialStatus": "needs_clarification",
+        "resolvedStatus": "matched",
+        "parent": "site-development",
+        "requiredSubskills": [
+          "product-discovery",
+          "data-ingestion",
+          "api-integration",
+          "product-interface",
+          "quality-assurance"
+        ],
+        "allowedSubskills": [
+          "product-discovery",
+          "data-ingestion",
+          "api-integration",
+          "product-interface",
+          "quality-assurance"
+        ],
+        "forbiddenSubskills": [
+          "inference-api",
+          "request-lifecycle",
+          "api-keys-auth",
+          "usage-metering",
+          "billing-entitlements",
+          "dashboard-account",
+          "observability",
+          "evaluations",
+          "documentation",
+          "deployment",
+          "marketing",
+          "auth",
+          "onboarding",
+          "account",
+          "billing"
+        ],
+        "clarification": {
+          "necessary": true,
+          "requiredConceptGroups": [
+            ["api", "backend", "inference core"],
+            ["site", "dashboard", "product around", "customer product"]
+          ],
+          "minimumDistinctPlans": 2,
+          "expectedOptionId": "existing-api-full-product"
+        },
+        "abstain": false,
+        "dependencies": [
+          { "before": "product-discovery", "after": "data-ingestion", "relation": "direct" },
+          { "before": "data-ingestion", "after": "api-integration", "relation": "direct" },
+          { "before": "data-ingestion", "after": "product-interface", "relation": "direct" },
+          { "before": "data-ingestion", "after": "quality-assurance", "relation": "direct" },
+          { "before": "api-integration", "after": "quality-assurance", "relation": "direct" },
+          { "before": "product-interface", "after": "quality-assurance", "relation": "direct" }
+        ],
+        "globalSearch": { "initial": 1, "subsequent": 0, "maxTotal": 1 },
+        "bundle": {
+          "required": true,
+          "atomic": true,
+          "repositorySnapshotRequired": true,
+          "registryDigestRequired": true,
+          "dispatchDigestsPinned": true,
+          "stableAcrossProgress": true
+        }
+      },
+      "steps": [
+        { "id": "route", "operation": "route", "globalSearchCount": 1 },
+        { "id": "clarify", "operation": "clarify", "optionId": "existing-api-full-product", "globalSearchCount": 0 }
+      ]
+    },
+    {
+      "id": "contrast-marketing-site-only",
+      "primary": false,
+      "category": "scope-contrast",
+      "description": "A landing-page-only request must use the existing marketing site child and must not expand into the transcript golden's product application work.",
+      "request": "Build a marketing landing page for our inference API. Do not touch ingestion, the product application, backend APIs, or test the whole product.",
+      "expectation": {
+        "initialStatus": "matched",
+        "resolvedStatus": "matched",
+        "parent": "site-development",
+        "requiredSubskills": ["marketing"],
+        "allowedSubskills": ["marketing"],
+        "forbiddenSubskills": [
+          "product-discovery",
+          "data-ingestion",
+          "api-integration",
+          "product-interface",
+          "quality-assurance",
+          "auth",
+          "onboarding",
+          "account",
+          "billing"
+        ],
+        "clarification": { "necessary": false },
+        "abstain": false,
+        "dependencies": [],
+        "globalSearch": { "initial": 1, "subsequent": 0, "maxTotal": 1 },
+        "bundle": {
+          "required": true,
+          "atomic": true,
+          "repositorySnapshotRequired": true,
+          "registryDigestRequired": true,
+          "dispatchDigestsPinned": true,
+          "stableAcrossProgress": true
+        }
+      },
+      "steps": [
+        { "id": "route", "operation": "route", "globalSearchCount": 1 }
+      ]
+    },
+    {
+      "id": "contrast-irrelevant-abstention",
+      "primary": false,
+      "category": "irrelevant-abstention",
+      "description": "A non-development request must not be forced into either development parent.",
+      "request": "Book me a dentist appointment next Tuesday afternoon.",
+      "expectation": {
+        "initialStatus": "abstain",
+        "resolvedStatus": "abstain",
+        "parent": null,
+        "requiredSubskills": [],
+        "allowedSubskills": [],
+        "forbiddenSubskills": [
+          "marketing",
+          "auth",
+          "onboarding",
+          "account",
+          "billing",
+          "product-discovery",
+          "data-ingestion",
+          "api-integration",
+          "product-interface",
+          "quality-assurance",
+          "inference-api",
+          "request-lifecycle",
+          "api-keys-auth",
+          "usage-metering",
+          "billing-entitlements",
+          "dashboard-account",
+          "observability",
+          "evaluations",
+          "documentation",
+          "deployment"
+        ],
+        "clarification": { "necessary": false },
+        "abstain": true,
+        "dependencies": [],
+        "globalSearch": { "initial": 1, "subsequent": 0, "maxTotal": 1 },
+        "bundle": {
+          "required": false,
+          "atomic": true,
+          "repositorySnapshotRequired": false,
+          "registryDigestRequired": false,
+          "dispatchDigestsPinned": false,
+          "stableAcrossProgress": false
+        }
+      },
+      "steps": [
+        { "id": "route", "operation": "route", "globalSearchCount": 1 }
+      ]
+    }
+  ]
+}

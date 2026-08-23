@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0",
+  "id": "skillmd-138k",
+  "kind": "huggingface-parquet",
+  "dataset": "FayeZC/SkillMD-138K",
+  "revision": "0d73048abf2fb6ee91f6f9f5ac598d5be8d6bdd7",
+  "artifact": "train.parquet",
+  "url": "https://huggingface.co/datasets/FayeZC/SkillMD-138K/resolve/0d73048abf2fb6ee91f6f9f5ac598d5be8d6bdd7/train.parquet",
+  "sha256": "c3c07af019bc36fb0ffdfaef46df52daffb66ca79422990a74c58e416d1e6403",
+  "bytes": 560428690,
+  "rows": 138133,
+  "compilationLicense": "CC-BY-4.0",
+  "itemLicensePolicy": "inherit-upstream-unresolved",
+  "trustTier": "quarantine-research",
+  "allowedDownloadHosts": [
+    "huggingface.co",
+    "hf.co"
+  ]
+}

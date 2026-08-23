@@ -1,0 +1,8 @@
+interface:
+  display_name: "TRAIL Development Router"
+  short_description: "Automatically route and execute coding work"
+  default_prompt: "Use TRAIL automatically for this development request, follow the pinned PlanBundle and explicit subskill transitions, and keep append-only progress."
+
+policy:
+  allow_implicit_invocation: true
+
