@@ -13,9 +13,10 @@ const valueAfter = (name) => {
 };
 const database = valueAfter("--database") ?? process.env.TRAIL_POSTGRES_DATABASE;
 const connection = valueAfter("--url") ?? process.env.TRAIL_POSTGRES_URL;
+const outputSql = argument.includes("--output-sql");
 
-if (!database && !connection) {
-  console.error("Usage: node scripts/seed-postgres.mjs --database trail_knowledge  OR  TRAIL_POSTGRES_URL=postgresql://… node scripts/seed-postgres.mjs");
+if (!outputSql && !database && !connection) {
+  console.error("Usage: node scripts/seed-postgres.mjs --database trail_knowledge  OR  TRAIL_POSTGRES_URL=postgresql://… node scripts/seed-postgres.mjs  OR  --output-sql");
   process.exit(1);
 }
 
@@ -58,6 +59,11 @@ for (const trail of trails.filter((item) => item.reviewStatus === "approved" && 
 
 statements.push(`insert into knowledge_syncs (collection_id, source, summary) values ('${collectionId}', 'public-seed-corpus', ${json({ approvedTrails: trails.filter((item) => item.reviewStatus === "approved").length, rawTranscriptsUploaded: false, policy: "review-before-retrieval" })});`);
 statements.push("commit;");
+
+if (outputSql) {
+  process.stdout.write(`${statements.join("\n")}\n`);
+  process.exit(0);
+}
 
 const psqlArgs = ["-v", "ON_ERROR_STOP=1", "-X"];
 if (connection) psqlArgs.push(connection);
