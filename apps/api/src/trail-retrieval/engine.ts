@@ -21,9 +21,11 @@ const ENVIRONMENT_FIELDS = [
   "os",
   "host",
   "client",
+  "path",
   "workspace",
   "repository",
   "branch",
+  "head",
   "runtime",
   "authSurface",
 ] as const satisfies readonly (keyof TrailEnvironment)[];

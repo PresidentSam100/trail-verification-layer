@@ -45,6 +45,44 @@ describe("deterministic TRAIL retrieval", () => {
     expect(result.applicableTrails.some((match) => match.trail.id === WRONG_CHECKOUT_TRAIL.id)).toBe(false);
   });
 
+  it("hard-filters path and HEAD constraints introduced by the shared environment contract", () => {
+    const scopedTrail = {
+      ...WRONG_CHECKOUT_TRAIL,
+      id: "trail-path-and-head",
+      environment: {
+        ...WRONG_CHECKOUT_TRAIL.environment,
+        path: "C:/work/service-live",
+        head: "abc1234",
+      },
+    } satisfies Trail;
+    const matching = retrieve({
+      environment: {
+        ...productionEnvironment,
+        path: "C:\\work\\service-live",
+        head: "ABC1234",
+      },
+      candidates: [scopedTrail],
+    });
+    const mismatching = retrieve({
+      environment: {
+        ...productionEnvironment,
+        path: "C:/work/service-copy",
+        head: "def5678",
+      },
+      candidates: [scopedTrail],
+    });
+
+    expect(matching.selectedTrail?.trail.id).toBe(scopedTrail.id);
+    expect(matching.selectedTrail?.matchReasons).toContain(
+      'environment path matched required value "C:/work/service-live"',
+    );
+    expect(matching.selectedTrail?.matchReasons).toContain('environment head matched required value "abc1234"');
+    expect(mismatching.rejectedNearMatches[0]?.rejectionReasons).toEqual([
+      'environment mismatch for path: expected "C:/work/service-live", received "C:/work/service-copy"',
+      'environment mismatch for head: expected "abc1234", received "def5678"',
+    ]);
+  });
+
   it("hard-rejects a trail when an invalidator is active", () => {
     const invalidated = {
       ...WRONG_CHECKOUT_TRAIL,
