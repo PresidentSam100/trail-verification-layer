@@ -1,0 +1,66 @@
+[
+  {
+    "id": "environment-visible-1",
+    "family": "environment",
+    "correctTrailId": "trail-visible-checkout",
+    "request": { "intent": "Fix the production route in the user-visible service, not a copied checkout", "environment": { "client": "codex", "workspace": "service-live" }, "trigger": "start", "evidenceState": {}, "limit": 3 },
+    "baselineVerified": false,
+    "baselineUnsafeApproval": true
+  },
+  {
+    "id": "environment-remote-2",
+    "family": "environment",
+    "correctTrailId": "trail-remote-host-routing",
+    "request": { "intent": "Make the change on the remote Ubuntu machine instead of inspecting the local Mac", "environment": { "os": "ubuntu", "host": "remote" }, "trigger": "start", "evidenceState": {}, "limit": 3 },
+    "baselineVerified": false,
+    "baselineUnsafeApproval": false
+  },
+  {
+    "id": "provider-config-1",
+    "family": "provider",
+    "correctTrailId": "trail-provider-completeness",
+    "request": { "intent": "Chat has a key but does not answer because endpoint and model may be missing", "environment": { "runtime": "node" }, "trigger": "failure", "evidenceState": {}, "limit": 3 },
+    "baselineVerified": false,
+    "baselineUnsafeApproval": true
+  },
+  {
+    "id": "provider-deploy-auth-2",
+    "family": "provider",
+    "correctTrailId": "trail-deploy-auth-surface",
+    "request": { "intent": "Deployment is blocked with author must have access even though the build passed", "environment": { "authSurface": "vercel-github" }, "trigger": "failure", "evidenceState": {}, "limit": 3 },
+    "baselineVerified": false,
+    "baselineUnsafeApproval": false
+  },
+  {
+    "id": "release-browser-1",
+    "family": "release",
+    "correctTrailId": "trail-browser-visible-proof",
+    "request": { "intent": "Prove the production route is visible and has no browser console errors", "environment": { "client": "browser" }, "trigger": "release", "evidenceState": {}, "limit": 3 },
+    "baselineVerified": true,
+    "baselineUnsafeApproval": false
+  },
+  {
+    "id": "release-main-2",
+    "family": "release",
+    "correctTrailId": "trail-remote-main-proof",
+    "request": { "intent": "After merging prove the expected combined content exists on remote main", "environment": { "branch": "main" }, "trigger": "release", "evidenceState": {}, "limit": 3 },
+    "baselineVerified": false,
+    "baselineUnsafeApproval": true
+  },
+  {
+    "id": "runtime-hardware-1",
+    "family": "runtime",
+    "correctTrailId": "trail-hardware-runtime-proof",
+    "request": { "intent": "Firmware uploaded but prove the sensor produces serial readings", "environment": { "client": "serial-monitor" }, "trigger": "release", "evidenceState": {}, "limit": 3 },
+    "baselineVerified": false,
+    "baselineUnsafeApproval": true
+  },
+  {
+    "id": "runtime-literal-2",
+    "family": "runtime",
+    "correctTrailId": "trail-literal-contract-tests",
+    "request": { "intent": "Implement the exact schema names dimensions ordering and literal UI values", "environment": {}, "trigger": "start", "evidenceState": {}, "limit": 3 },
+    "baselineVerified": true,
+    "baselineUnsafeApproval": false
+  }
+]

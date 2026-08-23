@@ -1,0 +1,3 @@
+{"timestamp":"2026-08-23T09:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"Deploy from /Users/demo/private/repo and email demo@example.com when done. Token: sk-test-1234567890abcdef"}}
+{"timestamp":"2026-08-23T09:00:02Z","type":"response_item","payload":{"type":"function_call_output","output":"Error: authenticated locally but production route still returns 401 from https://github.com/private/example.git"}}
+{"timestamp":"2026-08-23T09:00:04Z","type":"event_msg","payload":{"type":"user_message","message":"That is the wrong checkout. Verify the visible route before saying it is deployed."}}

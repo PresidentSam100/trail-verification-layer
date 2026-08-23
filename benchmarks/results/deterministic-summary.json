@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-08-23T17:45:00.000Z",
+  "executor": "deterministic-fixture",
+  "disclaimer": "These are deterministic fixture results, not live-model results.",
+  "taskCount": 8,
+  "repetitions": 3,
+  "endToEndRuns": 48,
+  "metrics": {
+    "baselineVerified": { "numerator": 6, "denominator": 24 },
+    "guidedVerified": { "numerator": 24, "denominator": 24 },
+    "unsafeApprovals": { "baseline": 12, "guided": 0 },
+    "recallAt1": 0.9583,
+    "recallAt3": 0.9583,
+    "mrr": 0.9583
+  }
+}

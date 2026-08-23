@@ -1,0 +1,6 @@
+{
+  "task": "Fix the production route, prove the visible result, and prepare the PR for release.",
+  "intendedWorkspace": "service-live",
+  "allowedPaths": ["service-copy/route.txt", "service-live/route.txt"],
+  "checks": ["unit", "visible-route"]
+}

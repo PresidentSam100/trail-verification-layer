@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.trail/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+*.tsbuildinfo
+.DS_Store
+apps/web/playwright-report/
+apps/web/test-results/
+
+.gstack/

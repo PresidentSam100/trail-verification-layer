@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-08-23T18:00:00.000Z",
+  "privacy": "Raw transcripts remain local. Source paths and excerpts are represented only by SHA-256 digests; observations are paraphrased from locally redacted record ranges.",
+  "reviews": [
+    {
+      "provider": "codex",
+      "sourcePathHash": "99c300bf76d3c5112e23eb5992ac7df43e558e6bebfe46c98dd29da4a503a842",
+      "redactedExcerptHash": "9c6c2b5fdd7f61d67168db17c150703728075aa9b472e7ad0887551f7cd76d53",
+      "sourceRange": "redacted records 8-358",
+      "signals": ["tool-error", "user-correction", "environment-change", "release-proof", "runtime-proof"],
+      "observations": [
+        "A visible UI mismatch required inspection of the actual browser surface, not a source-only judgment.",
+        "A local dependency gap blocked the Mac build while the Linux deployment target remained a separate truth surface.",
+        "The recovery preserved unrelated changes and separated a scoped commit from push and release verification."
+      ]
+    },
+    {
+      "provider": "codex",
+      "sourcePathHash": "1d25e06c2c830a97b41a4414f576a0aa85a12764c1b8686098ef9ee65dc9369f",
+      "redactedExcerptHash": "00218793b0f208d496d231c6f0633d3dcb61fb4af40f20bac1ce7953bb291a2d",
+      "sourceRange": "redacted records 8-73",
+      "signals": ["user-correction", "environment-change"],
+      "observations": [
+        "The first route inspected the currently visible local client when the user meant a remote Ubuntu session.",
+        "The user's correction changed the required host and client surface before any project inspection could be valid."
+      ]
+    },
+    {
+      "provider": "codex",
+      "sourcePathHash": "23baab034404207093195d87922733555d6159fb962b781e6c9231c3c0dcffeb",
+      "redactedExcerptHash": "48bf9a38dd09ae1768d47b78a693476cd064346a88cca570fec9d33bdd15e9fd",
+      "sourceRange": "redacted records 5-220",
+      "signals": ["tool-error", "user-correction", "environment-change", "release-proof", "runtime-proof"],
+      "observations": [
+        "Hosted MCP verification required separating tenant/key creation, transport handshake, host allowlisting, and tool execution.",
+        "Secret-bearing commands needed a local-file boundary and redacted output rather than convenience logging."
+      ]
+    },
+    {
+      "provider": "codex",
+      "sourcePathHash": "ea72b8a1826cece0ab4218d24f888a523330fb0655c4669de005ac8a1e7ab7ed",
+      "redactedExcerptHash": "bb3d009f114cf9627f245070527157e4d1f3042e7d9c1a7258dac6f81b6dff3a",
+      "sourceRange": "redacted records 8-1130",
+      "signals": ["tool-error", "user-correction", "environment-change", "runtime-proof"],
+      "observations": [
+        "A major runtime replacement still carried forward exact retained UI, telemetry, and negative-scope constraints.",
+        "The trajectory exposed why an agent must preserve explicit removals across a long, multi-phase implementation."
+      ]
+    },
+    {
+      "provider": "codex",
+      "sourcePathHash": "80cbd18800b88cf063f7f1a38b1cd27485f7e7c85d369cec647c9b29951bcbba",
+      "redactedExcerptHash": "fd8ec6726ecf0aa450fac2e99d3e42832e0548b8fbf21d819012cf9e96c6fa7c",
+      "sourceRange": "redacted records 9-436",
+      "signals": ["tool-error", "user-correction", "environment-change", "runtime-proof"],
+      "observations": [
+        "Hardware work first required resolving the actual driver and safe wiring instead of acting on ambiguous pin language.",
+        "Compilation or upload was not sufficient evidence; runtime behavior from the attached device remained the finish line."
+      ]
+    },
+    {
+      "provider": "claude",
+      "sourcePathHash": "d22fa2bdbf4da2e22f52b3a3560f8b275f41ea626fe87e0875143cb723dd3ebd",
+      "redactedExcerptHash": "5e4a8d861acebe08b2ca75a5cd40fe61299f05c8d75278e287286829adf140e6",
+      "sourceRange": "redacted records 9-218",
+      "signals": ["tool-error", "environment-change"],
+      "observations": [
+        "Media selection generated a large candidate set and required inspecting artifact metadata rather than guessing from filenames.",
+        "A failed temporary-file route was replaced by direct evidence collection over the candidate artifacts."
+      ]
+    },
+    {
+      "provider": "claude",
+      "sourcePathHash": "a39dd5c4a76f5261dc95793c5f7944b95ace436e9f334717db5f0828c7522f3f",
+      "redactedExcerptHash": "d2f1d02386e832458535b469e5a9f6b79885c4128211801612645df991e6254d",
+      "sourceRange": "redacted records 9-1009",
+      "signals": ["tool-error", "user-correction", "environment-change", "release-proof"],
+      "observations": [
+        "Production data access was unavailable despite nearby local and test configuration.",
+        "The safe outcome made the missing authority explicit instead of treating adjacent credentials as a valid provider route."
+      ]
+    },
+    {
+      "provider": "codex",
+      "sourcePathHash": "4fd77c278932271953dc04e4b94a121508e89364b3cfee5f3df606b92b9e96b1",
+      "redactedExcerptHash": "5b5a925139ce8e3130a3c6a11a11cb35eed04a08cc693c2921842631cdf3893f",
+      "sourceRange": "redacted records 8-234",
+      "signals": ["tool-error", "user-correction", "environment-change", "runtime-proof"],
+      "observations": [
+        "The task explicitly required modifying the existing unpacked extension instead of creating a replacement project.",
+        "Useful proof depended on the browser running the intended local source and exercising its active-thread behavior."
+      ]
+    }
+  ]
+}
