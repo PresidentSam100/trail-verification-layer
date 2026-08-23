@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { loadEnvFile } from "node:process";
 
@@ -25,8 +26,8 @@ export const config = {
   extractorModel: process.env.OPENAI_EXTRACTOR_MODEL ?? "gpt-5.6-luna",
   providerLabel,
   reasoningEffort: (process.env.OPENAI_REASONING_EFFORT ?? "medium") as "low" | "medium" | "high",
-  codexSessionsPath: resolve(process.env.HOME ?? "", ".codex/sessions"),
-  claudeSessionsPath: resolve(process.env.HOME ?? "", ".claude/projects"),
+  codexSessionsPath: resolve(homedir(), ".codex/sessions"),
+  claudeSessionsPath: resolve(homedir(), ".claude/projects"),
 };
 
 export function preflight() {

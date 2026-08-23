@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import type { IngestionPreview } from "@trail/contracts";
+import { TrailSchema, type IngestionPreview, type Trail } from "@trail/contracts";
 import { redactText } from "./redaction.js";
 
 type TranscriptFormat = IngestionPreview["format"];
@@ -135,6 +135,54 @@ export function previewTranscript(sourceName: string, raw: string): IngestionPre
     candidateSignals,
     requiresReview: detections.length > 0 || format === "unknown",
   };
+}
+
+export function createManualTrailDraft(preview: IngestionPreview): Trail {
+  const sourceHash = createHash("sha256").update(preview.redactedText, "utf8").digest("hex");
+  const triggers = preview.candidateSignals.includes("release-proof")
+    ? ["release"]
+    : preview.candidateSignals.some((signal) => signal === "tool-error" || signal === "user-correction")
+      ? ["failure"]
+      : ["start"];
+  const label = (preview.candidateSignals[0] ?? `${preview.format} trajectory`).replace(/[-_]+/g, " ");
+  return TrailSchema.parse({
+    schemaVersion: "1.0",
+    id: `trail-draft-${preview.id.slice(0, 8)}`,
+    title: `Review route from ${label}`,
+    summary: "Manual draft generated from a locally redacted transcript. Replace every placeholder with claims supported by the review payload.",
+    taskFamily: preview.candidateSignals[0] ?? "review-required",
+    intent: "Turn the reviewed redacted evidence into an explicit, verifiable route.",
+    provenance: {
+      provider: preview.format === "unknown" ? "community" : preview.format,
+      sourceHash,
+      sourceRange: "locally redacted review payload",
+      redacted: true,
+    },
+    environment: preview.format === "unknown" ? {} : { client: preview.format },
+    preconditions: ["Confirm the redacted transcript excerpt is representative of the intended task."],
+    negativeConstraints: ["Do not infer missing steps or restore redacted source data."],
+    triggers,
+    failureSignatures: preview.candidateSignals.length ? preview.candidateSignals : ["unreviewed trajectory"],
+    steps: [{
+      id: "replace-with-reviewed-step",
+      action: "Replace this template with the exact successful action sequence supported by the redacted transcript.",
+      tool: "verify",
+      evidence: [{
+        id: "reviewed-proof",
+        kind: "runtime",
+        description: "Add the concrete observable that proves this route succeeded.",
+        required: true,
+        expected: "Replace with an exact expected value.",
+      }],
+      onFailure: "stop",
+    }],
+    applicability: ["A reviewer confirms this trajectory matches the intended task family."],
+    invalidators: ["The redacted excerpt does not contain enough evidence to support the route."],
+    outcome: "A human-reviewed, evidence-gated route is available for retrieval.",
+    confidence: 0.25,
+    reviewStatus: "draft",
+    tags: [...preview.candidateSignals, "manual-template"],
+  });
 }
 
 export function previewTranscriptFile(path: string) {
