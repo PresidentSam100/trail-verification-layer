@@ -88,7 +88,7 @@ function AppShell({ tab, setTab, health, children }: { tab: Tab; setTab: (tab: T
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button className="brand" aria-label="TRAIL live proof" onClick={() => setTab("proof")}><Mark /><span>TRAIL</span><small>Trajectory Retrieval & Intent Alignment Layer</small></button>
+        <button className="brand" aria-label="TRAIL skill library" onClick={() => setTab("corpus")}><Mark /><span>TRAIL</span><small>Trajectory Retrieval & Intent Alignment Layer</small></button>
         <nav aria-label="Primary navigation">
           {navigation.map((item) => <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}>{item.label}</button>)}
         </nav>
@@ -727,7 +727,7 @@ function WeightBars({ weights }: { weights: RetrievalPolicy["weights"] | undefin
 }
 
 export function App() {
-  const [tab, setTab] = useState<Tab>("proof");
+  const [tab, setTab] = useState<Tab>("corpus");
   const [health, setHealth] = useState<Health | null>(null);
   const [trails, setTrails] = useState<Trail[]>([]);
   const [policies, setPolicies] = useState<RetrievalPolicy[]>([]);
