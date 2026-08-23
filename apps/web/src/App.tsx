@@ -293,6 +293,25 @@ type SkillDefinition = {
   description: string;
   families: string[];
 };
+type SkillIngestion = {
+  id: string;
+  status: "scanning" | "completed" | "failed";
+  rootPath: string;
+  expectedTotal: number | null;
+  discovered: number;
+  indexed: number;
+  skipped: number;
+  errors: number;
+  bytes: number;
+  skillCount: number;
+  subskillCount: number;
+  ratePerSecond: number;
+  currentPath: string;
+  recent: Array<{ sourceName: string; skill: string; subskill: string; indexedAt: string }>;
+  startedAt: string;
+  completedAt: string | null;
+  error: string | null;
+};
 
 const skillDefinitions: SkillDefinition[] = [
   {
@@ -319,6 +338,99 @@ const initialSubskill = initialSkill.families[0]!;
 
 function displayName(value: string) {
   return value.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+}
+
+const numberFormatter = new Intl.NumberFormat("en-US");
+
+function formatBytes(value: number) {
+  if (value < 1_024) return `${value} B`;
+  if (value < 1_048_576) return `${(value / 1_024).toFixed(1)} KB`;
+  if (value < 1_073_741_824) return `${(value / 1_048_576).toFixed(1)} MB`;
+  return `${(value / 1_073_741_824).toFixed(1)} GB`;
+}
+
+function connectIngestionStream(id: string, onJob: (job: SkillIngestion) => void, onError: (message: string) => void) {
+  const stream = eventStream(`/api/skill-ingestions/${id}/events`);
+  stream.onmessage = (message) => onJob(JSON.parse(message.data) as SkillIngestion);
+  stream.addEventListener("complete", (message) => {
+    onJob(JSON.parse((message as MessageEvent).data) as SkillIngestion);
+    stream.close();
+  });
+  stream.onerror = () => {
+    if (stream.readyState === EventSource.CLOSED) onError("The live stream closed before ingestion completed.");
+  };
+  return stream;
+}
+
+function LiveIngestionPanel() {
+  const [rootPath, setRootPath] = useState("");
+  const [expectedTotal, setExpectedTotal] = useState("138000");
+  const [job, setJob] = useState<SkillIngestion | null>(null);
+  const [error, setError] = useState("");
+  const streamRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void api<{ job: SkillIngestion | null }>("/api/skill-ingestions/latest").then((result) => {
+      if (!active || !result.job) return;
+      setJob(result.job);
+      if (result.job.status === "scanning") {
+        streamRef.current = connectIngestionStream(result.job.id, setJob, setError);
+      }
+    }).catch(() => undefined);
+    return () => { active = false; streamRef.current?.close(); };
+  }, []);
+
+  const start = async () => {
+    setError("");
+    streamRef.current?.close();
+    try {
+      const total = Number.parseInt(expectedTotal.replaceAll(",", ""), 10);
+      const body = { rootPath: rootPath.trim(), ...(Number.isFinite(total) && total > 0 ? { expectedTotal: total } : {}) };
+      const result = await api<{ job: SkillIngestion }>("/api/skill-ingestions", { method: "POST", body: JSON.stringify(body) });
+      setJob(result.job);
+      streamRef.current = connectIngestionStream(result.job.id, setJob, setError);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to start ingestion.");
+    }
+  };
+
+  const running = job?.status === "scanning";
+  const expected = job?.expectedTotal ?? null;
+  const progress = job ? job.status === "completed" ? 100 : expected ? Math.min(99.5, job.discovered / expected * 100) : 0 : 0;
+
+  return (
+    <section className={`live-ingestion ${running ? "is-running" : ""}`} aria-label="Live SKILL.md ingestion">
+      <div className="ingestion-intro">
+        <div className="ingestion-title"><span className="live-dot" aria-hidden="true" /><div><small>LIVE DATA INGESTION</small><h2>Index a skill corpus as it arrives.</h2></div></div>
+        <p>Point TRAIL at any local folder. It discovers nested <code>SKILL.md</code> files, extracts hierarchy metadata, and writes in batches without loading the corpus into the browser.</p>
+        <div className="ingestion-form">
+          <label><span>Corpus folder</span><input value={rootPath} onChange={(event) => setRootPath(event.target.value)} placeholder="C:\\data\\skill-library" disabled={running} /></label>
+          <label className="expected-field"><span>Expected files</span><input inputMode="numeric" value={expectedTotal} onChange={(event) => setExpectedTotal(event.target.value.replace(/[^\d,]/g, ""))} placeholder="Optional" disabled={running} /></label>
+          <button onClick={() => void start()} disabled={running || !rootPath.trim()}>{running ? "Ingesting…" : "Start ingestion"}<span aria-hidden="true">→</span></button>
+        </div>
+        <div className="ingestion-safety"><span>LOCAL</span><p>Metadata only. File contents stay on this machine. No OpenAI key or model call is used.</p></div>
+      </div>
+
+      <div className="ingestion-monitor" aria-live="polite">
+        <header><div><span className={`monitor-state state-${job?.status ?? "idle"}`}>{job?.status ?? "Ready"}</span><strong>{job ? `${numberFormatter.format(job.indexed)} indexed` : "Waiting for a corpus"}</strong></div>{job && <small>{numberFormatter.format(job.ratePerSecond)} files/sec</small>}</header>
+        <div className={`ingestion-progress ${expected ? "determinate" : "indeterminate"}`}><i style={{ width: expected || job?.status === "completed" ? `${progress}%` : undefined }} /></div>
+        <p className="current-ingestion-path" title={job?.currentPath}>{job?.currentPath ?? "Choose a folder to begin a live scan."}</p>
+        <dl className="ingestion-metrics">
+          <div><dt>{job ? numberFormatter.format(job.discovered) : "—"}</dt><dd>discovered</dd></div>
+          <div><dt>{job ? numberFormatter.format(job.skillCount) : "—"}</dt><dd>skills</dd></div>
+          <div><dt>{job ? numberFormatter.format(job.subskillCount) : "—"}</dt><dd>subskills</dd></div>
+          <div><dt>{job ? formatBytes(job.bytes) : "—"}</dt><dd>source size</dd></div>
+        </dl>
+        <div className="ingestion-activity">
+          <div><span>RECENT ACTIVITY</span>{job && <small>{job.errors ? `${job.errors} errors` : "No errors"}</small>}</div>
+          {job?.recent.length ? <ol>{job.recent.slice(0, 6).map((item) => <li key={`${item.sourceName}-${item.indexedAt}`}><i /><div><strong>{item.skill}</strong><span>{item.subskill} · {item.sourceName}</span></div></li>)}</ol> : <p>Newly indexed skills will appear here.</p>}
+        </div>
+        {error && <p className="ingestion-error">{error}</p>}
+        {job?.error && <p className="ingestion-error">{job.error}</p>}
+      </div>
+    </section>
+  );
 }
 
 function SkillLibraryView({ trails }: { trails: Trail[] }) {
@@ -376,6 +488,8 @@ function SkillLibraryView({ trails }: { trails: Trail[] }) {
         <div><p className="eyebrow">ROUTER-READY OPERATIONAL KNOWLEDGE</p><h1>Operational skills and subskills.</h1><p>TRAIL organizes reviewed agent experience into a hierarchy the router can navigate: execution skills, focused subskills, and the evidence-backed layers beneath each one.</p></div>
         <dl><div><dt>{skills.length}</dt><dd>skills</dd></div><div><dt>{subskillCount}</dt><dd>subskills</dd></div><div><dt>{trails.length}</dt><dd>approved trails</dd></div></dl>
       </header>
+
+      <LiveIngestionPanel />
 
       <label className="skill-search"><span aria-hidden="true">⌕</span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search skills, subskills, intent, or evidence" /><kbd>/</kbd></label>
 
