@@ -431,11 +431,10 @@ function SkillLibraryView({ trails }: { trails: Trail[] }) {
         <dl><div><dt>{skills.length}</dt><dd>skill groups</dd></div><div><dt>{subskillCount}</dt><dd>subskills</dd></div><div><dt>{trails.length}</dt><dd>skill placeholders</dd></div><div><dt>318K</dt><dd>source target</dd></div></dl>
       </header>
 
-      <LiveIngestionPanel />
-
       <label className="skill-search"><span aria-hidden="true">⌕</span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search skills, subskills, intent, or evidence" /><kbd>/</kbd></label>
 
       <section className="taxonomy-board" aria-label="Skill hierarchy">
+        <header className="taxonomy-heading"><div><span>SKILL TREE</span><strong>{trails.length} routed skill placeholders</strong></div><small>Group → subskill → SKILL.md leaf</small></header>
         <div className="root-node"><span>Knowledge domain</span><strong>Agent execution</strong><small>318K SKILL.md source target · {trails.length} routed placeholders</small></div>
         <div className="root-connector" aria-hidden="true" />
         <div className="skill-node-grid">
@@ -461,6 +460,8 @@ function SkillLibraryView({ trails }: { trails: Trail[] }) {
           })}
         </div>
       </section>
+
+      <LiveIngestionPanel />
 
       <section className="library-workspace">
         <aside className="subskill-index">
