@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { IngestionPreview, RetrievalPolicy, RunEvent, RunMetrics, Trail } from "@trail/contracts";
 import { api, eventStream } from "./api";
+import { ContextView } from "./ContextView";
 
-type Tab = "proof" | "corpus" | "ingest" | "policy";
+type Tab = "context" | "proof" | "corpus" | "ingest" | "policy";
 type Health = {
   status: string;
   corpusCount: number;
@@ -64,6 +65,7 @@ type Benchmark = {
 };
 
 const navigation: Array<{ id: Tab; label: string }> = [
+  { id: "context", label: "Build context" },
   { id: "proof", label: "Live proof" },
   { id: "corpus", label: "Skill library" },
   { id: "ingest", label: "Data intake" },
@@ -754,6 +756,7 @@ export function App() {
 
   return (
     <AppShell tab={tab} setTab={setTab} health={health}>
+      {tab === "context" && <ContextView health={health} />}
       {tab === "proof" && <ProofView health={health} />}
       {tab === "corpus" && <SkillLibraryView trails={trails} />}
       {tab === "ingest" && <IngestView health={health} onApproved={(trail) => setTrails((current) => [trail, ...current.filter((item) => item.id !== trail.id)])} />}
