@@ -300,7 +300,7 @@ function connectIngestionStream(id: string, onJob: (job: SkillIngestion) => void
 
 function LiveIngestionPanel() {
   const [rootPath, setRootPath] = useState("");
-  const [expectedTotal, setExpectedTotal] = useState("138000");
+  const [expectedTotal, setExpectedTotal] = useState("318000");
   const [job, setJob] = useState<SkillIngestion | null>(null);
   const [error, setError] = useState("");
   const streamRef = useRef<EventSource | null>(null);
@@ -345,7 +345,7 @@ function LiveIngestionPanel() {
           <label className="expected-field"><span>Expected files</span><input inputMode="numeric" value={expectedTotal} onChange={(event) => setExpectedTotal(event.target.value.replace(/[^\d,]/g, ""))} placeholder="Optional" disabled={running} /></label>
           <button onClick={() => void start()} disabled={running || !rootPath.trim()}>{running ? "Ingesting…" : "Start ingestion"}<span aria-hidden="true">→</span></button>
         </div>
-        <div className="ingestion-safety"><span>LOCAL</span><p>Metadata only. File contents stay on this machine. No OpenAI key or model call is used.</p></div>
+        <div className="ingestion-safety"><span>LOCAL</span><p>Metadata only. Handles the 318K target corpus and the pinned 138,133-row SkillMD source without an OpenAI key or model call.</p></div>
       </div>
 
       <div className="ingestion-monitor" aria-live="polite">
@@ -418,11 +418,17 @@ function SkillLibraryView({ trails }: { trails: Trail[] }) {
     setSelectedTrailId("");
   };
 
+  const choosePlaceholder = (skillId: string, family: string, trailId: string) => {
+    setSelectedSkillId(skillId);
+    setSelectedSubskill(family);
+    setSelectedTrailId(trailId);
+  };
+
   return (
     <div className="view skill-library-view">
       <header className="skill-library-heading">
         <div><p className="eyebrow">ROUTER-READY OPERATIONAL KNOWLEDGE</p><h1>Operational skills and subskills.</h1><p>TRAIL organizes reviewed agent experience into a hierarchy the router can navigate: execution skills, focused subskills, and the evidence-backed layers beneath each one.</p></div>
-        <dl><div><dt>{skills.length}</dt><dd>skills</dd></div><div><dt>{subskillCount}</dt><dd>subskills</dd></div><div><dt>{trails.length}</dt><dd>approved trails</dd></div></dl>
+        <dl><div><dt>{skills.length}</dt><dd>skill groups</dd></div><div><dt>{subskillCount}</dt><dd>subskills</dd></div><div><dt>{trails.length}</dt><dd>skill placeholders</dd></div><div><dt>318K</dt><dd>source target</dd></div></dl>
       </header>
 
       <LiveIngestionPanel />
@@ -430,7 +436,7 @@ function SkillLibraryView({ trails }: { trails: Trail[] }) {
       <label className="skill-search"><span aria-hidden="true">⌕</span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search skills, subskills, intent, or evidence" /><kbd>/</kbd></label>
 
       <section className="taxonomy-board" aria-label="Skill hierarchy">
-        <div className="root-node"><span>Knowledge domain</span><strong>Agent execution</strong><small>{trails.length} reviewed operational trails</small></div>
+        <div className="root-node"><span>Knowledge domain</span><strong>Agent execution</strong><small>318K SKILL.md source target · {trails.length} routed placeholders</small></div>
         <div className="root-connector" aria-hidden="true" />
         <div className="skill-node-grid">
           {skills.map((skill) => {
@@ -441,8 +447,13 @@ function SkillLibraryView({ trails }: { trails: Trail[] }) {
                 <p>{skill.description}</p>
                 <div className="subskill-node-list">
                   {skill.families.map((family) => {
-                    const familyCount = visible.filter((trail) => trail.taskFamily === family).length;
-                    return <button className={family === selectedSubskill ? "active" : ""} key={family} onClick={() => chooseSubskill(skill.id, family)}><span>{displayName(family)}</span><b>{familyCount}</b></button>;
+                    const familyTrails = visible.filter((trail) => trail.taskFamily === family);
+                    return <div className={`subskill-branch ${family === selectedSubskill ? "active" : ""}`} key={family}>
+                      <button className="subskill-node" onClick={() => chooseSubskill(skill.id, family)}><span>{displayName(family)}</span><b>{familyTrails.length}</b></button>
+                      <div className="placeholder-node-list">
+                        {familyTrails.map((trail) => <button className={trail.id === selectedTrail?.id ? "active" : ""} key={trail.id} title={trail.title} onClick={() => choosePlaceholder(skill.id, family, trail.id)}><i /><span>{trail.title}</span></button>)}
+                      </div>
+                    </div>;
                   })}
                 </div>
               </article>
